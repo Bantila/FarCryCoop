@@ -1,4 +1,4 @@
-# FarCry6UpgradedCoop
+# FarCryCoop
 
 **EN:** Research into co-op for more than 2 players in Far Cry 6, following the
 [coop-anything](https://github.com/cranebeaker/coop-anything) playbook. Notes:
