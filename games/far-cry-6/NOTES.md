@@ -1,6 +1,8 @@
 # Far Cry 6 — co-op notes
 
-Goal from owner: co-op for more than 2 players (owner said "up to 4", and also "me + 4 friends" = 5; to be clarified).
+Russian version: [NOTES.ru.md](NOTES.ru.md)
+
+Goal from owner: co-op for 5 players (owner confirmed 2026-10-18: "me + 4 friends").
 
 ## Game identity (AGENTS.md rule 5)
 
@@ -77,5 +79,5 @@ Goal from owner: co-op for more than 2 players (owner said "up to 4", and also "
 ### Blockers / contradictions (rule 6, rule 10)
 
 - Raising the cap means patching a Denuvo-protected exe and/or altering sessions that run through
-  Ubisoft's online services. AGENTS.md rule 10 forbids DRM bypass for online services. Needs owner
-  decision before any reverse engineering.
+  Ubisoft's online services. AGENTS.md rule 10 forbids DRM bypass for online services.
+- Owner decision 2026-10-18: research and try; DRM bypass stays off the table.
