@@ -89,3 +89,9 @@ Observed 2026-10-18 on the owner's PC (read-only):
 - Raising the cap means patching a Denuvo-protected exe and/or altering sessions that run through
   Ubisoft's online services. AGENTS.md rule 10 forbids DRM bypass for online services.
 - Owner decision 2026-10-18: research and try; DRM bypass stays off the table.
+
+## Update 2026-10-18: FC4 cap mod hidden
+
+- Observation (owner pasted the page text): https://www.nexusmods.com/farcry4/mods/179 shows "Hidden mod", hidden at 18 Oct 2026, 6:30AM by PropertyNotYours: "The mod has (possible) permission issues that the author is working to address."
+- Consequence: the patch details cannot be read. Unofficial mirrors are not used (AGENTS.md rule 8, permission issue stated by Nexus).
+- Next step: find the 2-player cap in FC6 ourselves, after the install is restored to original files.
