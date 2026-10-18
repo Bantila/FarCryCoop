@@ -6,11 +6,19 @@ Goal from owner: co-op for 5 players (owner confirmed 2026-10-18: "me + 4 friend
 
 ## Game identity (AGENTS.md rule 5)
 
-- Store: unknown (ask owner: Steam app 2369390 / Ubisoft Connect / Epic)
-- Version / build id: unknown
-- SHA-256 of main exe: unknown
+Observed 2026-10-18 on the owner's PC (read-only):
+
+- Store: Steam, app 2369390 (`appmanifest_2369390.acf`)
+- Steam build id: 11359732 (`buildid` = `TargetBuildID`)
+- `bin\FarCry6.exe` SHA-256: `820537DDCD6A26A54C6A3CA52786780D6834C691F41D2107E05709B95D520E12`
+  (FileVersion `1, 0, 0, 0`, size 345920)
+- `bin\FC_m64d3d12.dll` SHA-256: `E82C7320C8554D0AC975C256DB1C79EC046C0448E5B81BF50E3012B3642061AA`
+  (size 521313320)
 - Engine: Dunia (Far Cry series engine; FC3/FC4 entries in coop-anything list Dunia)
-- OS: Windows (owner's PC), unknown version
+- OS: Windows 11 Pro 10.0.26200
+- Status: install NOT confirmed as original. `bin` contains third-party DLLs (details in `local/`, not
+  committed). AGENTS.md rule 5/6: no analysis until the owner restores original files
+  (Steam → Properties → Installed Files → "Verify integrity of game files") and hashes are re-taken.
 
 ## Phase 0–1: research, 2026-10-18
 
