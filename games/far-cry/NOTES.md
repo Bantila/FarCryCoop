@@ -2,16 +2,37 @@
 
 Russian version: [NOTES.ru.md](NOTES.ru.md)
 
-Status: placeholder. Active work: Far Cry 6 only (owner decision 2026-10-18).
+Status: recon (branch `game/far-cry`, started 2026-10-18). Goal: campaign co-op for up to 4 players, joined through a shared launcher for the whole series (Steam friends, Spacewar AppID 480, room code).
 
 ## Game identity (AGENTS.md rule 5)
 
 - Store / ownership: Steam app 13520, installed in D:\SteamLibrary
-- Version / build id: unknown
-- SHA-256 of main exe: unknown
+- Version / build id: 1.4.0.1405 (from `log.txt`)
+- SHA-256 of main exe: `Bin32\FarCry.exe` `21a907fae0b6e2d4b10d546dba0965ef89c39a69f8cb00036307c0564ca1a813`; `CryGame.dll` `db9c7660b698600ae34dd4a18f7ca5989911ad51bf9286ba1cc047ae52ef7634`; `CryNetwork.dll` `10aed71c092c4f057edcba49a593b569dab9fc10a263b48e60f973065bdaa908`
 - Engine: CryEngine 1
-- Install checked for third-party DLLs: no
+- Install checked for third-party DLLs: yes. Found in `Bin32` and `Bin64`: `version.dll` (ASI loader), `SilentPatchFarCry.asi`, `FarCry.WidescreenFix.asi`; mod `Mods\FarOut_Widescreen`; `FCData\Tent AI Bug Fix.pak`. PunkBuster in `Pb\`. `Bin64` has no 64-bit game exe, only these add-ons.
 
 ## Known so far
 
 - No official co-op; competitive multiplayer exists. Mods: Assault Coop (partial, ~7 campaign maps, 2011) https://www.moddb.com/mods/assault-coop ; FCAV (co-op announced, not released) https://farcry1.itch.io/far-cry-advanced-version (source: coop-anything data/directory.yaml, checked 2026-10-16).
+
+## Recon 2026-10-18
+
+Working copy: `E:\FarCryCoop\Workar-cry\Bin32` (exe + DLLs) and `Workar-cry\scripts` (unpacked `FCData\Scripts.pak`).
+
+- Single player already runs as a local server plus a local client. `Scripts\Default\gamerules.lua` (the single-player rules) has `OnClientConnect`, `OnClientDisconnect` and `RespawnPlayer` per `server_slot`. Respawn already goes to the last checkpoint (`_LastCheckPPos`).
+- The game type is the Lua global `g_GameType`. Campaign sets it to `Default` (`MenuScreens\Campaign.lua`). Multiplayer sets it to `ASSAULT`, `FFA` or `TDM` and starts the map with `Game:LoadLevelMPServer`. The create-server menu hides `Default`.
+- Each level lists its missions in `levelinfo.xml`. Campaign map `Training` has mission `Training` (`mission_training.xml`); MP map `mp_airstrip` has mission `ASSAULT`. `Game:CheckMap(map, gametype)` checks this list before an MP map load.
+- Mods live in `Mods\<name>\` with their own `.pak` files that override scripts. A co-op mod can be a mod folder; the game binaries stay untouched as long as Lua is enough.
+- Official CryENGINE MOD SDK 1.4 includes the C++ source of `CryGame.dll` (the game DLL: server/client game logic). Use only this official SDK, not the leaked full engine source.
+
+Guess, not verified: a host can start a campaign map as an MP server with `g_GameType=Default` and mission `Training`, and remote clients get the single-player rules. Unknown: what the C++ side (`CXServer`, `CXClient`, AI, cut scenes, save games) does with more than one client in a campaign mission.
+
+Not done: REA is not registered in this session (see `docs/tools/rea.md`), so no Ghidra analysis yet. Assault Coop page on moddb returned HTTP 403.
+
+## Next steps
+
+1. Spike: start `Training` as an MP server with `g_GameType=Default` and join from a second instance on LAN. Write down what breaks.
+2. Download CryENGINE MOD SDK 1.4 into `Downloadsarcry-sdk-1.4\`, check SHA-256, read `CXServer`/`CXClient`/game-rules code.
+3. Steam P2P transport: check where `CryNetwork.dll` opens its UDP socket, to plan a tunnel for the launcher.
+4. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).
