@@ -49,6 +49,21 @@ Result: the server loaded `Training` with the single-player `GameRules` (655 ent
 
 Still unchecked: mission objectives, AI behaviour, cut scenes, checkpoints, a second remote player.
 
+## Spike 2 — weapons broken for the remote client (2026-10-18, root cause found)
+
+Symptom on campaign maps (both `DEFAULT` and `FFA` rules): the remote client can walk, run and jump, but has no weapon model, cannot fire (endless reload), and crouch is not shown. Stock `mp_airstrip` + `ASSAULT` works fully.
+
+Evidence (server tracer `GameRules:OnUpdate` hook, client tracer `ClientStuff.OnUpdate` hook, one line per second):
+- Server receives everything: crouch (`crouching=1`), fire (`firing=1`), weapon switches, damage, respawn.
+- Client on `mp_airstrip`: weapon 19, clip 50, ammo 100, `canfire=1`, `drawfpweapon=1`.
+- Client on `Pier`: weapon 19 (P90), clip 0, ammo 0, `canfire=nil`, `drawfpweapon=nil`; the server meanwhile already switched to weapon 12 (MP5).
+
+Root cause: a level loads weapon classes from its mission XML `<Weapons><Used>` list (`CXSystemBase::LoadXMLNode` -> `CWeaponSystemEx::AddWeapon`). MP missions list every weapon; campaign missions list only a few (`Pier`: Falcon, M4, Machete, SniperRifle). On the server, missing classes are loaded on demand by `BasicPlayer:ScriptInitWeapon` -> `Game:AddWeapon`; the remote client never does this, so `CPlayer::Read` -> `SelectWeapon` fails for unloaded classes.
+
+Fix direction (for the mod): client-side co-op script loads every class from `WeaponClassesEx` (`Scripts\Default\Entities\Weapons\WeaponSystem.lua`) at level load, before the local player is spawned. A runtime test from the console (`Game:AddWeapon` for all classes after spawn) gave the first-person weapon back (`drawfpweapon=1`) but not ammo/fire, so it must happen before the player is set up.
+
+Also seen: switching the map on the server drops the client back to the menu; the campaign intro cut scene does not play for the client; FC1 console input is cut at about 100 characters (use `#dofile("E:/...")` for longer Lua).
+
 ## Next steps
 
 1. Spike: start `Training` as an MP server with `g_GameType=Default` and join from a second instance on LAN. Write down what breaks.
