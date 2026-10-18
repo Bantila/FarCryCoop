@@ -17,3 +17,5 @@ English version: [NOTES.md](NOTES.md)
 - Штатный кооп: 2 игрока, открытый мир. Моды: Campaign Co-op (2 игрока, частично) https://www.nexusmods.com/farcry4/mods/153 ; Removes Co-op 2 Player Limit (в тестировании, до 4) https://www.nexusmods.com/farcry4/mods/179 (каталог coop-anything).
 
 - 2026-10-18: мод 179 скрыт на Nexus («(possible) permission issues»), по тексту страницы от владельца.
+
+- 2026-10-18, мод 153 (автор scubrah, по фрагменту страницы Nexus из поиска): кооп основной кампании на 2 игроков; меняет часть миссий; все миссии Шангри-Ла недоступны; мод нужен обоим игрокам и сохранение после первой красной двери за ужином с Пэйганом; автор пишет, что патч в DLL и обновления Steam/Ubisoft могут его затереть. Лимит игроков не поднимает. https://www.nexusmods.com/farcry4/mods/153
