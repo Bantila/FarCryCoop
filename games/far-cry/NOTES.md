@@ -30,6 +30,25 @@ Guess, not verified: a host can start a campaign map as an MP server with `g_Gam
 
 Not done: REA is not registered in this session (see `docs/tools/rea.md`), so no Ghidra analysis yet. Assault Coop page on moddb returned HTTP 403.
 
+## Spike 1 — campaign map as a network server (2026-10-18, works)
+
+Run from the install in `D:` (owner's one-time exception to the copy rule; the game rewrote its own `log.txt` / `log_WinSV.txt` there, no files were changed by us).
+
+Steps that worked:
+1. `Bin32\FarCry_WinSV.exe -DEVMODE` (Lua `#` console commands work only with `-DEVMODE`; console input line is limited to roughly 100 characters).
+2. In the server console, after the banner (commands passed on the command line run too early and are ignored):
+   ```
+   #AvailableMODList.DEFAULT={team=0,respawntime=0,mission="Training"}
+   g_GameType DEFAULT
+   start_server Training
+   ```
+   `start_server` takes the mission from `AvailableMODList[g_GameType]`; `Game:CheckMap("Training","Training")` is 1, with `"Default"` it is nil.
+3. Client: plain `Bin32\FarCry.exe`, Multiplayer -> LAN -> join. (Passing `"connect 127.0.0.1"` or `r_Width` on the command line made the client shut down right after init; typing `connect` in the main-menu console did nothing.)
+
+Result: the server loaded `Training` with the single-player `GameRules` (655 entities). The client got slot 1, a player entity at the first respawn point with 255 health, the normal HUD, and could walk, shoot and play. Two processes (dedicated server + client) run on one PC.
+
+Still unchecked: mission objectives, AI behaviour, cut scenes, checkpoints, a second remote player.
+
 ## Next steps
 
 1. Spike: start `Training` as an MP server with `g_GameType=Default` and join from a second instance on LAN. Write down what breaks.
