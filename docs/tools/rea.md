@@ -37,6 +37,20 @@ Local scope stores the entry in `%USERPROFILE%\.claude.json` for this folder onl
 REA's skill. Remove with `claude mcp remove --scope local rea` from the same folder.
 Alternative: `npx rea-agents setup` registers REA for every project (user scope) and installs the skill.
 
+## Registered on the owner's PC (2026-10-18)
+
+Owner approved the one write to `C:\Users\<user>\.claude.json` (local scope, this folder only). All tool paths point to `E:\FarCryCoop`:
+
+```powershell
+$R='E:\FarCryCoop'
+claude mcp add --scope local rea -e "GHIDRA_INSTALL_DIR=$R\Tools\ghidra_12.1.4_PUBLIC" -e "JAVA_HOME=$R\Tools\jdk-21.0.12.1+1" `
+  -e "TEMP=$R\Temp" -e "TMP=$R\Temp" -e "npm_config_cache=$R\Data\npm-cache" `
+  -e "XDG_CONFIG_HOME=$R\Data\xdg-config" -e "XDG_CACHE_HOME=$R\Data\xdg-cache" `
+  -- cmd.exe /d /c "$R\Tools\node-v24.22.0-win-x64\npx.cmd" -y rea-agents@6.7.0 mcp
+```
+
+The server name must come before the `-e` options (`-e` takes several values). `claude mcp get rea` shows `Connected`; the tools appear in a new Claude Code session. `rea doctor`: Ghidra 12.1.4 and JDK 21 healthy; Hopper, IDA, jadx, Kuna not installed (not needed).
+
 ## Rules that apply to us
 
 - AGENTS.md rule 2: analyse only a **copy** of the game folder, never the install.

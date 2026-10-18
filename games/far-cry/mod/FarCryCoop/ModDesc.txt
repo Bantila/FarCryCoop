@@ -1,0 +1,5 @@
+_Title_ = "FarCryCoop"
+_Author_ = "FarCryCoop"
+_Version_ = "0.1"
+_Website_ = ""
+_Description_ = "Campaign co-op for up to 4 players"

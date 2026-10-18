@@ -38,6 +38,20 @@ claude mcp list
 при этом не ставится. Удаление: `claude mcp remove --scope local rea` из той же папки.
 Альтернатива: `npx rea-agents setup` регистрирует REA для всех проектов (user scope) и ставит навык.
 
+## Зарегистрирован на ПК владельца (2026-10-18)
+
+Владелец разрешил одну запись в `C:\Users\<user>\.claude.json` (локальная область, только эта папка). Все пути инструментов ведут в `E:\FarCryCoop`:
+
+```powershell
+$R='E:\FarCryCoop'
+claude mcp add --scope local rea -e "GHIDRA_INSTALL_DIR=$R\Tools\ghidra_12.1.4_PUBLIC" -e "JAVA_HOME=$R\Tools\jdk-21.0.12.1+1" `
+  -e "TEMP=$R\Temp" -e "TMP=$R\Temp" -e "npm_config_cache=$R\Data\npm-cache" `
+  -e "XDG_CONFIG_HOME=$R\Data\xdg-config" -e "XDG_CACHE_HOME=$R\Data\xdg-cache" `
+  -- cmd.exe /d /c "$R\Tools\node-v24.22.0-win-x64\npx.cmd" -y rea-agents@6.7.0 mcp
+```
+
+Имя сервера должно идти до опций `-e` (`-e` принимает несколько значений). `claude mcp get rea` показывает `Connected`; инструменты появляются в новой сессии Claude Code. `rea doctor`: Ghidra 12.1.4 и JDK 21 в порядке; Hopper, IDA, jadx, Kuna не установлены (не нужны).
+
 ## Правила, которые нас касаются
 
 - Правило 2 из AGENTS.md: анализируем только **копию** папки игры, не установку.

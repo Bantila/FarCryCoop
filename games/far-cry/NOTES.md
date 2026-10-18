@@ -64,6 +64,18 @@ Fix direction (for the mod): client-side co-op script loads every class from `We
 
 Also seen: switching the map on the server drops the client back to the menu; the campaign intro cut scene does not play for the client; FC1 console input is cut at about 100 characters (use `#dofile("E:/...")` for longer Lua).
 
+## Spike 3 — mod `FarCryCoop` and the real blocker (2026-10-18)
+
+Owner decision: the mod lives in `<game>\Mods\FarCryCoop\` on the install in `D:` (only this folder is ours; game files stay untouched). Source: `games/far-cry/mod/FarCryCoop/`, packed by `games/far-cry/mod/deploy.ps1` into `FarCryCoop.pak`. Start both server and client with `-MOD:FarCryCoop`.
+
+Mod v0.1: game type `COOP` (single-player rules), console command `coop_map <map>` (mission = `Game:GetMapDefaultMission`), client preloads all `WeaponClassesEx` in `ClientStuff:OnInit` (runs after level load, before the server sends the player).
+
+Result: the weapon preload alone does not help. Real blocker: on campaign maps the server's entity updates never reach the client. The client copy of its own player stays at the spawn point with `hp=255` and no name, while on the server it is "Jack Carver" far away with other health; AI moved on the server stay at their XML position on the client. Input from the client does reach the server. On `mp_airstrip` with the same `COOP` rules sync works (crouch visible), so the cause is the campaign map (≈650 net entities), not the rules. Raising `sv_maxrate_lan` / `sv_maxrate` did not help; `cl_maxrate` on the command line runs before `Client` exists and is ignored. Suspects in C++: `CXSnapshot::BuildAndSendSnapshot` priority threshold, `CXClient::OnServerMsgTimeStamp` (`m_bIgnoreSnapshot`).
+
+Russian keyboard layout: the game does not take input with it; switch to EN before playing (to fix later).
+
+Toolchain: MSVC 14.44 (VS 2022, x86) found at `D:\TailCore\toolchain\vs` (another project's, used read-only). Rebuilding `CryGame.dll` with it is unsafe: engine interfaces pass `std::string` / `std::vector` across DLL borders (e.g. `IEntitySystem::GetEntitiesInRadius`, `IXGame::CreateTagPoint`), and VS 2022 STL layout differs from VS 2003. Chosen path (owner, 2026-10-18): an ASI plugin (loaded by the already installed `version.dll`) that hooks functions of the original `CryGame.dll` 1.4 by address; addresses found with REA/Ghidra against the SDK source.
+
 ## Next steps
 
 1. Spike: start `Training` as an MP server with `g_GameType=Default` and join from a second instance on LAN. Write down what breaks.
