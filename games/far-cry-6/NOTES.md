@@ -39,6 +39,41 @@ Goal from owner: co-op for more than 2 players (owner said "up to 4", and also "
 - Whether the 2-player cap is enforced client-side, in Ubisoft's matchmaking service, or both.
 - Whether the FC4 mod technique actually works on FC6.
 
+## Research round 2, 2026-10-18 (owner wants 5 players; DRM bypass refused)
+
+### Observations (with sources)
+
+- FC4 cap mod: per search snippet of the Nexus page, author used Ghidra + x64dbg to find and patch the
+  code behind the 2-player limit; install copies files into `bin`, backing up `FC64.dll`,
+  `patch_hd.dat`, `patch_hd.fat`; all lobby members need the mod. https://www.nexusmods.com/farcry4/mods/179
+  (page itself not fetched: host blocked by this environment's network policy).
+- FC6 game code DLL: an FOV mod replaces `FC_m64d3d12.dll` in `bin` (`bin_plus` for Ubisoft+).
+  https://www.pcgamer.com/far-cry-6-mod-lets-you-change-fov-while-driving-and-horsing-around/
+- Forum post: swapping that DLL between `bin` and `bin_plus` stops launch ("verification of uplay").
+  https://fearlessrevolution.com/viewtopic.php?t=17693&start=90
+- PCGamingWiki (via search snippet): all versions need Ubisoft Connect, Denuvo Anti-Piracy and VMProtect.
+  https://www.pcgamingwiki.com/wiki/Far_Cry_6 (page itself not fetched: blocked host).
+- Forum: Ubisoft uses VMProtect mutation in FC6 code, complicating analysis.
+  https://fearlessrevolution.com/viewtopic.php?t=17693&start=90
+- FC5 (Dunia, predecessor): no campaign mod above 2 players found; Arcade mode supports more players.
+  https://steamcommunity.com/app/552520/discussions/0/4352239903169408552/ ,
+  https://expertbeacon.com/does-far-cry-5-have-4-player-co-op/
+- Tools: Gibbed.Dunia (Dunia file formats) https://github.com/gibbed/Gibbed.Dunia ; Ultimate ASI Loader
+  https://github.com/ThirteenAG/Ultimate-ASI-Loader ; FC6 Mod Installer (Libertad Mod team, .a3 packages)
+  https://www.gamepressure.com/download/far-cry-6-mod-installer-v-20220811-0000/z313870
+
+### Derived (not verified)
+
+- Since FC6 code lives in `FC_m64d3d12.dll` like FC4's `FC64.dll`, the FC4 approach (find the cap, patch it)
+  is the closest template. Patching the DLL file on disk likely conflicts with Denuvo/VMProtect integrity
+  checks -> off limits. A runtime patch of the cap value after the game has started (DRM left running and
+  untouched) does not bypass DRM, but still changes a session hosted through Ubisoft's online service.
+
+### Guesses (labelled)
+
+- Even if the cap is lifted, extra players may be invisible/T-posed (as the FC4 author warns) and story
+  scripts assume 2 players. Chance of a playable 5-player campaign: low.
+
 ### Blockers / contradictions (rule 6, rule 10)
 
 - Raising the cap means patching a Denuvo-protected exe and/or altering sessions that run through
