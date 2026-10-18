@@ -22,6 +22,14 @@ and are written in English only: `<type>(<optional scope>): <description>`, e.g.
 **RU:** Сообщения коммитов пишутся по Conventional Commits и только на английском:
 `<тип>(<область, необязательно>): <описание>`, например `docs(far-cry-6): add research notes`.
 
+## Tools / Инструменты
+
+**EN:** Reverse engineering uses REA (https://github.com/morluto/rea) as an MCP server, registered
+locally on the owner's PC: see [docs/tools/rea.md](docs/tools/rea.md).
+
+**RU:** Для реверс-инжиниринга используется REA (https://github.com/morluto/rea) как MCP-сервер,
+подключённый локально на ПК владельца: см. [docs/tools/rea.ru.md](docs/tools/rea.ru.md).
+
 ## Communication / Общение
 
 **EN:** Chat with the owner in Russian.
