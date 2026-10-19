@@ -43,3 +43,39 @@ function GameRules:OnUpdate(DeltaTime)
 		end
 	end
 end
+
+-- Client-side hits (see COOP ClientStuff): apply the damage a client reports for its own shot.
+function GameRules:OnClientCmd(server_slot, cmd)
+	local tk = tokenize(cmd);
+	if (tk[1] == "CHIT") then CoopClientHit(server_slot, tk); end
+end
+
+function CoopClientHit(server_slot, tk)
+	local shooter = System:GetEntity(server_slot:GetPlayerId());
+	local target = System:GetEntity(tonumber(tk[2]) or 0);
+	local damage = tonumber(tk[3]) or 0;
+	if (not shooter or not target or target.type ~= "Player" or not BasicPlayer.IsAlive(shooter)
+		or not BasicPlayer.IsAlive(target) or damage <= 0 or damage > 1000) then
+		return; -- ponytail: trusts the client otherwise (co-op among friends), add checks if cheating matters
+	end
+	local hit = {
+		shooter = shooter, target = target, weapon = shooter.cnt.weapon,
+		damage = damage, ipart = tonumber(tk[4]) or -1, damage_type = "normal", landed = 1,
+		target_material = Materials["mat_"..tk[5]] or Materials["mat_flesh"],
+		pos = {x = tonumber(tk[6]), y = tonumber(tk[7]), z = tonumber(tk[8])},
+		dir = {x = tonumber(tk[9]), y = tonumber(tk[10]), z = tonumber(tk[11])},
+		normal = {x = -tonumber(tk[9]), y = -tonumber(tk[10]), z = -tonumber(tk[11])},
+		impact_force_mul = 0, impact_force_mul_final = 0, impact_force_mul_final_torso = 0,
+		COOP_ClientHit = 1,
+	};
+	target:Damage(hit);
+end
+
+-- Server-side bullets of remote players would double the client-reported damage: drop them.
+-- The host of a listen server (its _localplayer) keeps server-side hits.
+COOP_OldOnDamage = GameRules.OnDamage;
+function GameRules:OnDamage(hit)
+	local s, t = hit.shooter, hit.target;
+	if (s and not s.ai and s ~= _localplayer and t and t.ai and not hit.COOP_ClientHit) then return end
+	return COOP_OldOnDamage(self, hit);
+end
