@@ -38,3 +38,13 @@ end
 ClientStuff.ServerCommandTable["NOCLIP"] = function(String, toktable)
 	if (_localplayer and CoopSetNoclip) then CoopSetNoclip(_localplayer, tonumber(toktable[2]) or 0); end
 end
+
+-- sequences forwarded by the server (see COOP gamerules); names may contain spaces ("HIDE ALL").
+-- Cutscene-flagged sequences stay off like on the server (mov_NoCutscenes).
+setglobal("mov_NoCutscenes", 1);
+ClientStuff.ServerCommandTable["SEQ"] = function(String, toktable)
+	if (not Game:IsServer()) then Movie:PlaySequence(strsub(String, 5)); end
+end
+ClientStuff.ServerCommandTable["SEQSTOP"] = function(String, toktable)
+	if (not Game:IsServer()) then Movie:StopSequence(strsub(String, 9)); end
+end

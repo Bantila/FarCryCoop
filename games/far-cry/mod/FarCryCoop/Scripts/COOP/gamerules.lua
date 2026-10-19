@@ -145,3 +145,20 @@ function CoopApplyLoad()
 	_LastCheckPAngles = new(save.players[1].ang);
 	System:LogAlways(format("coop_load: restored %d players, removed %d dead AI", getn(list), getn(save.dead)));
 end
+
+-- Movie sequences (e.g. the heli fly-by on Pier, started by a ProximityTrigger) play only on
+-- the machine that calls Movie:PlaySequence, and the entities they animate are not sent over
+-- the network. The server forwards every sequence start/stop to the clients ("SEQ"/"SEQSTOP",
+-- handled in COOP ClientStuff). Once: this file reloads on coop_restart.
+if (not COOP_OrigPlaySequence) then
+	COOP_OrigPlaySequence, COOP_OrigStopSequence = Movie.PlaySequence, Movie.StopSequence;
+	Movie.PlaySequence = function(self, name)
+		System:LogAlways("coop: sequence "..tostring(name));
+		COOP_OrigPlaySequence(self, name);
+		Server:BroadcastCommand("SEQ "..tostring(name));
+	end
+	Movie.StopSequence = function(self, name)
+		COOP_OrigStopSequence(self, name);
+		Server:BroadcastCommand("SEQSTOP "..tostring(name));
+	end
+end
