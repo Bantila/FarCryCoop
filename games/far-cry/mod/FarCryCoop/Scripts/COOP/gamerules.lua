@@ -5,8 +5,15 @@ Script:LoadScript("scripts/Default/gamerules.lua");
 -- Load every weapon class on the server before players spawn: a player's weapon table
 -- (CPlayer::m_mapPlayerWeapons) only has the classes loaded at that time, so weapons outside the
 -- mission's <Weapons><Used> list could never be given (MakeWeaponAvailable returned -1).
-for name, def in WeaponClassesEx do
-	Game:AddWeapon(name);
+-- On the first map load this file runs before WeaponClassesEx exists, so GameRules:OnUpdate
+-- does it on its first tick (a loop here aborted the whole file: no co-op rules at all).
+COOP_WeaponsLoaded = nil -- this file runs on every map load
+function CoopPreloadWeapons()
+	if (COOP_WeaponsLoaded or not WeaponClassesEx) then return; end
+	COOP_WeaponsLoaded = 1;
+	for name, def in WeaponClassesEx do
+		Game:AddWeapon(name);
+	end
 end
 
 -- On a dedicated server the AI puppets stay asleep: they stand still and never notice
@@ -17,6 +24,7 @@ COOP_WAKE_RADIUS = 150 -- ponytail: fixed radius, tune if far snipers or patrols
 COOP_NextWake = 0
 
 function GameRules:OnUpdate(DeltaTime)
+	CoopPreloadWeapons()
 	if COOP_God == 1 then -- coop_god: refill every frame
 		for i, P in CoopPlayers() do
 			if P.cnt.health > 0 then P.cnt.health = P.cnt.max_health; end
