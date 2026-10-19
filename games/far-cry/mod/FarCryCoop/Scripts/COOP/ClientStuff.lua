@@ -23,15 +23,9 @@ if (not COOP_OrigExecuteMaterial2) then
 		return COOP_OrigExecuteMaterial2(hit, effect);
 	end
 end
-COOP_DbgHits = 0; -- DEBUG (spike, remove): log the first reports
-
 function CoopReportHit(hit)
 	local t, s = hit.target, hit.shooter;
 	if (s ~= _localplayer or not t or t == s or t.type ~= "Player" or not BasicPlayer.IsAlive(t)) then return end
-	if (COOP_DbgHits < 10) then
-		COOP_DbgHits = COOP_DbgHits + 1;
-		System:LogAlways(format("COOPHIT %s dmg=%s", tostring(t:GetName()), tostring(hit.damage)));
-	end
 	Hud.hit = 5; -- red crosshair right away, as in single player
 	if (Game:IsServer()) then return end -- listen-server host: its shots are already server-side
 	local p, d = hit.pos, hit.dir;
