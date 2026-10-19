@@ -11,3 +11,8 @@ function ClientStuff:OnInit()
 		Game:AddWeapon(name);
 	end
 end
+
+-- coop_noclip from the server: switch fly mode for our own (predicted) player too
+ClientStuff.ServerCommandTable["NOCLIP"] = function(String, toktable)
+	if (_localplayer and CoopSetNoclip) then CoopSetNoclip(_localplayer, tonumber(toktable[2]) or 0); end
+end

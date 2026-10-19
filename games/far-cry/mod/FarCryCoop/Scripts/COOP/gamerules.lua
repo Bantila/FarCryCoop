@@ -10,6 +10,11 @@ COOP_WAKE_RADIUS = 150 -- ponytail: fixed radius, tune if far snipers or patrols
 COOP_NextWake = 0
 
 function GameRules:OnUpdate(DeltaTime)
+	if COOP_God == 1 then -- coop_god: refill every frame
+		for i, P in CoopPlayers() do
+			if P.cnt.health > 0 then P.cnt.health = P.cnt.max_health; end
+		end
+	end
 	if _time < COOP_NextWake then return end
 	COOP_NextWake = _time + 1
 	local players = {}

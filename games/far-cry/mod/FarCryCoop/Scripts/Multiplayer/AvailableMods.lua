@@ -22,10 +22,111 @@ function CoopMap(name)
 	-- cutscene sequences need input and sound, which a dedicated server lacks (crashes in
 	-- CMovieUser::BeginCutScene and CryMovie sound tracks); remote clients never see them anyway
 	setglobal("mov_NoCutscenes", 1);
-	-- entities (AI included) update only when potentially visible from the camera; a dedicated
-	-- server has no player camera, so the AI would stand still (hypothesis, test in game)
-	setglobal("es_VisCheckForUpdate", 0);
+	COOP_Map = name;
 	Game:LoadLevelListen(name);
 end
 Game:AddCommand("coop_map", "CoopMap(%line)", "coop_map <campaign map>: start a campaign map as a co-op server");
 
+-- FarCryCoop test commands for the host (server console) ------------------------------------
+
+-- player entities of all connected slots; built without tinsert, which adds a field "n"
+-- (Lua 4) that would show up as a number in "for i, P in CoopPlayers()"
+function CoopPlayers()
+	local t, k = {}, 0;
+	for i, slot in Server:GetServerSlotMap() do
+		local P = System:GetEntity(slot:GetPlayerId());
+		if (P) then k = k + 1; t[k] = P; end
+	end
+	return t;
+end
+
+-- move every player next to pos and make it the respawn point
+function CoopTeleport(pos, ang)
+	_LastCheckPPos = new(pos);
+	_LastCheckPAngles = new(ang);
+	for i, P in CoopPlayers() do
+		P:SetPos({x = pos.x + i, y = pos.y, z = pos.z}); -- 1 m apart so players do not stack
+		P:SetAngles(ang);
+	end
+	System:LogAlways(format("coop: teleported to %.0f,%.0f,%.0f", pos.x, pos.y, pos.z));
+end
+
+-- campaign checkpoints are GameEvent entities (Properties.nId, nAllowedDeaths)
+function CoopGoto(n)
+	n = tonumber(n);
+	local list = {};
+	for i, e in System:GetEntities() do
+		if (e.Properties and e.Properties.nId and e.Properties.nAllowedDeaths) then tinsert(list, e); end
+	end
+	sort(list, function(a, b) return a.Properties.nId < b.Properties.nId; end);
+	for i = 1, getn(list) do
+		local e = list[i];
+		local t = e:GetPos(); -- GetPos/GetAngles return shared tables: copy the values
+		local pos = {x = t.x, y = t.y, z = t.z};
+		if (not n) then
+			System:LogAlways(format("checkpoint %d at %.0f,%.0f,%.0f", e.Properties.nId, pos.x, pos.y, pos.z));
+		elseif (e.Properties.nId == n) then
+			t = e:GetAngles();
+			CoopTeleport(pos, {x = t.x, y = t.y, z = t.z});
+			return;
+		end
+	end
+	if (n) then System:LogAlways("coop_goto: no checkpoint "..n); end
+end
+Game:AddCommand("coop_goto", "CoopGoto(%line)", "coop_goto [id]: list checkpoints, or move all players to checkpoint <id>");
+
+function CoopSpawn(n)
+	local pt = Server:GetRespawnPoint("Respawn"..tostring(n));
+	if (not pt) then
+		System:LogAlways("coop_spawn: no tagpoint Respawn"..tostring(n));
+		return;
+	end
+	CoopTeleport({x = pt.x, y = pt.y, z = pt.z}, {x = pt.xA, y = pt.yA, z = pt.zA});
+end
+Game:AddCommand("coop_spawn", "CoopSpawn(%1)", "coop_spawn <n>: move all players to tagpoint Respawn<n>");
+
+-- god mode is applied in COOP GameRules:OnUpdate
+COOP_God = 0;
+function CoopGod(on)
+	COOP_God = tonumber(on) or (1 - COOP_God);
+	System:LogAlways("coop_god "..COOP_God);
+end
+Game:AddCommand("coop_god", "CoopGod(%line)", "coop_god [0/1]: toggle god mode for all players");
+
+-- refill every ammo type; giving extra weapons is pointless, the client only gets 4 weapon slots
+function CoopAmmo()
+	for i, P in CoopPlayers() do
+		for ammotype, amount in MaxAmmo do
+			if (P.Ammo and P.Ammo[ammotype]) then
+				BasicPlayer.AddAmmo(P, ammotype, amount);
+			end
+		end
+	end
+	System:LogAlways("coop_ammo: all ammo types refilled");
+end
+Game:AddCommand("coop_ammo", "CoopAmmo()", "coop_ammo: refill every ammo type for all players");
+
+-- noclip ("designer fly mode" of DevMode.lua): no gravity/inertia and no collision. Movement is
+-- predicted on the client, so the server switches it for its copy of each player and tells
+-- every client to do the same for its own player (ServerCommandTable["NOCLIP"] in COOP ClientStuff).
+COOP_Noclip = 0;
+function CoopSetNoclip(P, on)
+	if (on == 1) then
+		if (not P.COOP_SavedDyn) then P.COOP_SavedDyn = new(P.DynProp); end
+		P.DynProp.gravity = 0; P.DynProp.inertia = 0;
+		P.DynProp.swimming_gravity = 0; P.DynProp.swimming_inertia = 0; P.DynProp.air_control = 1;
+		P.cnt:SetDynamicsProperties(P.DynProp);
+		P:ActivatePhysics(0);
+	elseif (P.COOP_SavedDyn) then
+		P.DynProp = P.COOP_SavedDyn; P.COOP_SavedDyn = nil;
+		P.cnt:SetDynamicsProperties(P.DynProp);
+		P:ActivatePhysics(1);
+	end
+end
+function CoopNoclip(on)
+	COOP_Noclip = tonumber(on) or (1 - COOP_Noclip);
+	for i, P in CoopPlayers() do CoopSetNoclip(P, COOP_Noclip); end
+	for i, slot in Server:GetServerSlotMap() do slot:SendCommand("NOCLIP "..COOP_Noclip); end
+	System:LogAlways("coop_noclip "..COOP_Noclip);
+end
+Game:AddCommand("coop_noclip", "CoopNoclip(%line)", "coop_noclip [0/1]: toggle noclip fly mode for all players");
