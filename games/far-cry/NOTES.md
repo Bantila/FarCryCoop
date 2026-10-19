@@ -110,6 +110,18 @@ Stutter: `SNAP_BUDGET_BITS` raised to 8800 (biggest packet 8755 bits, ~750 updat
 
 Next: test other campaign maps.
 
+## Spike 5 — host tools, client-side hits, map restart, saves recon (2026-10-19)
+
+Host console commands (mod, `Scripts/Multiplayer/AvailableMods.lua`): `coop_goto [id]` lists the campaign checkpoints (`GameEvent` entities with `Properties.nId`) or moves all players to one and makes it the respawn point; `coop_spawn <n>` uses tagpoint `Respawn<n>`; `coop_god [0/1]`; `coop_ammo` refills every ammo type (`MaxAmmo` via `BasicPlayer.AddAmmo`; giving all weapons is useless, a client only gets 4 weapon slots in `CPlayer::Write`); `coop_noclip [0/1]` (DevMode "designer fly mode", applied on the server and, through the `NOCLIP` server command, on every client); `coop_restart`. Lua 4 pitfall: `tinsert` adds a field `n`, so `for i, P in t` met a number and broke every command; `CoopPlayers` builds the table by index.
+
+Map change/restart without dropping clients: the first `coop_map` uses `Game:LoadLevelListen` (starts the server), later ones `Game:LoadLevelMPServer` ("keeping the current clients connected", `ScriptObjectGame.cpp`). Verified: after `coop_restart` the client's world time resets and it keeps getting its own player 16-17 times a second, no menu.
+
+Unkillable enemies / no red crosshair: the red crosshair is a hit flash (`Hud.hit=5` in `Player:Client_OnRemoteEffect`, userbyte 3, sent by `BasicWeapon.Server:OnHit` as `FX`; drawn by `Hud:DrawCrosshair` in `GUI/HudCommon.lua`), not aiming. A client tracer showed that every `FX 3` the client got came from AI shooters: the server never registered the remote player's hits (it sees `fire=1`, but the clip barely drops). Not root-caused. Replaced by client-side hits: the client hooks the global `ExecuteMaterial2(hit, effect)` (`CWeaponClass` caches each weapon's `Client.OnHit`/`Server.OnHit` at class load, `WeaponClass.cpp` `GET_VALUE`, so hooks on weapon tables never run), sets `Hud.hit=5` and sends `CHIT <id> <dmg> <part> <mat> <pos> <dir>` with `Client:SendCommand`; COOP `GameRules:OnClientCmd` applies it with `target:Damage(hit)`; `GameRules:OnDamage` drops server-side hits of remote players on AI. Server side verified with a simulated `CHIT` (170 -> 120 hp); client side not yet confirmed in game.
+
+Saves recon: `CXGame::Save`/`LoadFromStream` return early when `IsMultiplayer()`. `SaveToStream` also needs a local client player (`m_pClient`, `CryError` otherwise) and the sound system (EAX preset), both missing on a dedicated server; `LoadFromStream` reloads the level through a local demo client and asserts a single server slot. Options: (A) real engine saves on a listen-server host: ASI bypass of the MP checks plus a custom loader that reloads with `LoadLevelMPServer` and restores entities without the single-player parts, large; (B) lightweight co-op checkpoint in Lua on the server: remember checkpoint, dead AI ids (static entity ids are stable across a reload of the same map), player ammo/health and mission objectives, then `coop_restart` and reapply; survives `coop_restart` (Lua globals persist), not a server restart unless written to a file. Recommended for testing: B.
+
+Open bug: `GameEvent:OnTimer` (checkpoint save) reads `_localplayer`, which is nil on a dedicated server.
+
 ## Next steps
 
 1. Spike: start `Training` as an MP server with `g_GameType=Default` and join from a second instance on LAN. Write down what breaks.
