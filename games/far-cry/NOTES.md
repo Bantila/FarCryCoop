@@ -122,9 +122,17 @@ Saves recon: `CXGame::Save`/`LoadFromStream` return early when `IsMultiplayer()`
 
 Open bug: `GameEvent:OnTimer` (checkpoint save) reads `_localplayer`, which is nil on a dedicated server.
 
+## Spike 6 — co-op rules on the first load, monitor (2026-10-19)
+
+The COOP gamerules did not run at all on the first `coop_map` (only after `coop_restart`): the weapon preload loop at the top of the file met `WeaponClassesEx == nil` (on the first load the gamerules run before the weapon classes are defined), the Lua error aborted the file, and the engine kept the half-loaded rules without our `OnUpdate`, `OnClientCmd`, `OnDamage` and sequence forwarding. Fixed: the preload runs on the first `GameRules:OnUpdate`. Errors in these files do not show in `log_WinSV.txt`; check with a probe (`#dofile` of a script that logs the `COOP_*` globals).
+
+Observed in game (Pier, Dam): the AI on the server works (mutants attack, damage reaches the player, the player dies and respawns, a gunship attacks the paraglider), the forwarded `heli` sequence reaches the client. Open: the owner sees enemies standing still while they move on the server; the owner got off the paraglider without wanting to; strong lag.
+
+Monitor (`Scripts/COOP/Monitor.lua`, `coop_monitor [0/1]`): once a second the server (`MON S`) and each client (`MON C`) log the same lines: players (position, health, armor, weapon, ammo, vehicle), AI within 60 m of a player (position, health, behaviour, target), vehicles and helicopters within 150 m (position, driver), and events (death, respawn, weapon change, vehicle enter/leave, map load, sequences). `tools/mon-diff.ps1` compares the last 10 s of both logs by entity id (the two game clocks differ) and lists entities that are frozen on the client, off by more than 5 m, missing, or differ in health, weapon, vehicle or driver.
+
 ## Next steps
 
-1. Verify in game (written without a run, owner was busy): AI after `coop_restart`, `coop_save`/`coop_load`, the forwarded heli sequence on `Pier`, `coop_weapons`.
+1. With the monitor: catch why enemies stand still on the client, the paraglider exit and the lag; then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
 2. Fix checkpoints on the dedicated server: `GameEvent:OnTimer` reads `_localplayer`.
 3. Real engine saves (option A of the saves recon), after the lightweight `coop_save`.
 4. Occasional stutter: non-own entities get ~7 updates/s under the snapshot budget.

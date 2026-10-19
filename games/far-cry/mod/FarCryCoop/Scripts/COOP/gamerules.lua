@@ -1,6 +1,8 @@
 -- FarCryCoop: campaign co-op rules. For now the single-player rules as they are:
 -- they already handle per-slot connect, disconnect and checkpoint respawn.
 Script:LoadScript("scripts/Default/gamerules.lua");
+Script:LoadScript("scripts/COOP/Monitor.lua");
+CoopMonEvent("S", "map "..tostring(COOP_Map)); -- this file runs on every map load
 
 -- Load every weapon class on the server before players spawn: a player's weapon table
 -- (CPlayer::m_mapPlayerWeapons) only has the classes loaded at that time, so weapons outside the
@@ -25,6 +27,7 @@ COOP_NextWake = 0
 
 function GameRules:OnUpdate(DeltaTime)
 	CoopPreloadWeapons()
+	CoopMonitor("S")
 	if COOP_God == 1 then -- coop_god: refill every frame
 		for i, P in CoopPlayers() do
 			if P.cnt.health > 0 then P.cnt.health = P.cnt.max_health; end
@@ -168,7 +171,7 @@ end
 if (not COOP_OrigPlaySequence) then
 	COOP_OrigPlaySequence, COOP_OrigStopSequence = Movie.PlaySequence, Movie.StopSequence;
 	Movie.PlaySequence = function(self, name)
-		System:LogAlways("coop: sequence "..tostring(name));
+		CoopMonEvent("S", "sequence "..tostring(name));
 		COOP_OrigPlaySequence(self, name);
 		Server:BroadcastCommand("SEQ "..tostring(name));
 	end

@@ -1,5 +1,6 @@
 -- FarCryCoop: client side of the co-op rules = single-player ClientStuff plus weapon preload.
 Script:LoadScript("scripts/Default/ClientStuff.lua");
+Script:LoadScript("scripts/COOP/Monitor.lua");
 
 -- Campaign missions list only a few weapons in <Weapons><Used>; the server loads the rest on demand,
 -- a remote client never does, so it cannot select, draw or fire them. OnInit runs after the level
@@ -10,6 +11,13 @@ function ClientStuff:OnInit()
 	for name, def in WeaponClassesEx do
 		Game:AddWeapon(name);
 	end
+	CoopMonEvent("C", "map");
+end
+
+Coop_DefaultClientOnUpdate = ClientStuff.OnUpdate;
+function ClientStuff:OnUpdate()
+	Coop_DefaultClientOnUpdate(self);
+	CoopMonitor("C");
 end
 
 -- Client-side hit detection: the shooter's own client decides what its bullets hit and tells
@@ -43,6 +51,7 @@ end
 -- Cutscene-flagged sequences stay off like on the server (mov_NoCutscenes).
 setglobal("mov_NoCutscenes", 1);
 ClientStuff.ServerCommandTable["SEQ"] = function(String, toktable)
+	CoopMonEvent("C", "sequence "..strsub(String, 5));
 	if (not Game:IsServer()) then Movie:PlaySequence(strsub(String, 5)); end
 end
 ClientStuff.ServerCommandTable["SEQSTOP"] = function(String, toktable)
