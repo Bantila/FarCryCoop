@@ -98,7 +98,7 @@ function CoopGod(on)
 end
 Game:AddCommand("coop_god", "CoopGod(%line)", "coop_god [0/1]: toggle god mode for all players");
 
--- refill every ammo type; giving extra weapons is pointless, the client only gets 4 weapon slots
+-- refill every ammo type
 function CoopAmmo()
 	for i, P in CoopPlayers() do
 		for ammotype, amount in MaxAmmo do
@@ -135,3 +135,16 @@ function CoopNoclip(on)
 	System:LogAlways("coop_noclip "..COOP_Noclip);
 end
 Game:AddCommand("coop_noclip", "CoopNoclip(%line)", "coop_noclip [0/1]: toggle noclip fly mode for all players");
+
+-- give all players every weapon (9 slots, PLAYER_MAX_WEAPONS) plus full ammo
+function CoopWeapons()
+	for i, P in CoopPlayers() do
+		for name, w in WeaponClassesEx do
+			Game:AddWeapon(name);
+			P.cnt:MakeWeaponAvailable(w.id);
+		end
+	end
+	CoopAmmo();
+	System:LogAlways("coop_weapons: all weapons given");
+end
+Game:AddCommand("coop_weapons", "CoopWeapons()", "coop_weapons: give all players every weapon and full ammo");

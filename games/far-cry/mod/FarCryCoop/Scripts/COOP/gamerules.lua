@@ -2,6 +2,13 @@
 -- they already handle per-slot connect, disconnect and checkpoint respawn.
 Script:LoadScript("scripts/Default/gamerules.lua");
 
+-- Load every weapon class on the server before players spawn: a player's weapon table
+-- (CPlayer::m_mapPlayerWeapons) only has the classes loaded at that time, so weapons outside the
+-- mission's <Weapons><Used> list could never be given (MakeWeaponAvailable returned -1).
+for name, def in WeaponClassesEx do
+	Game:AddWeapon(name);
+end
+
 -- On a dedicated server the AI puppets stay asleep: they stand still and never notice
 -- anyone (the single-player game wakes them around its local player). Once a second wake
 -- the puppets near any player. Puppets placed asleep on purpose (bSleepOnSpawn) or hidden
