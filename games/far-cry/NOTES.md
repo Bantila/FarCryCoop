@@ -76,6 +76,40 @@ Russian keyboard layout: the game does not take input with it; switch to EN befo
 
 Toolchain: MSVC 14.44 (VS 2022, x86) found at `D:\TailCore\toolchain\vs` (another project's, used read-only). Rebuilding `CryGame.dll` with it is unsafe: engine interfaces pass `std::string` / `std::vector` across DLL borders (e.g. `IEntitySystem::GetEntitiesInRadius`, `IXGame::CreateTagPoint`), and VS 2022 STL layout differs from VS 2003. Chosen path (owner, 2026-10-18): an ASI plugin (loaded by the already installed `version.dll`) that hooks functions of the original `CryGame.dll` 1.4 by address; addresses found with REA/Ghidra against the SDK source.
 
+## Spike 4 — ASI logger finds where updates are lost (2026-10-18)
+
+Plugin: `games/far-cry/asi/FarCryCoopNet.c`, built by `asi/build.ps1` (VS 2022 x86, no Windows SDK and no CRT: import libraries come from stub DLLs). Installed as `Bin32\FarCryCoopNet.asi` (owner allowed this one file), loaded by `version.dll` in both `FarCry.exe` and `FarCry_WinSV.exe`. It checks the `CryGame.dll` PE timestamp `0x44e2f64d`, hooks by address and writes a once-per-second summary to `Mods\FarCryCoop\netlog_<exe>_<pid>.txt`.
+
+Addresses in `CryGame.dll` 1.4.0.1405 (image base `0x33000000`, found with REA/Ghidra and checked against SDK sources):
+
+| Function | Address | Calling convention / notes |
+|---|---|---|
+| `CXSnapshot::BuildAndSendSnapshot` | `0x3306faba` | thiscall, no arguments; anchor string `netentities %d/%d` |
+| `CNetEntityInfo::Update(Vec3)` | `0x330bb9b7` | thiscall, `ret 0xc`; `+0x04` m_pEntity, `+0x1c` m_nPriority |
+| `CNetEntityInfo::Write(CXServer*, CStream&)` | `0x330bb82d` | thiscall, `ret 8` |
+| `CXClient::OnServerMsgTimeStamp(CStream&)` | `0x33080227` | thiscall, `ret 4` |
+| `CXClient::OnServerMsgUpdateEntity(CStream&)` | `0x330816ef` | thiscall, `ret 4`; anchor `error reading from the snapshot` |
+| `CXClient::ParseIncomingStream` (message switch) | `0x3308354b` | `false` from UpdateEntity drops the rest of the packet |
+| `GameWarning` | `0x3307019e` | cdecl, varargs |
+
+`CXClient` fields: `+0x0c` m_wPlayerID, `+0x10` m_iPhysicalWorldTime, `+0x14` m_bIgnoreSnapshot, `+0x40` m_bLocalHost, `+0x44` m_pGame, `+0x4c` m_pISystem. `CStream`: `+0x470` size in bits, `+0x474` read position.
+
+Result on `Pier` (COOP, `sv_maxrate*` 10000000):
+- Server: ~17 snapshots/s, 550 net entities, 442 of them priority 0, ~108 actually written per snapshot (1836/s), the slot player (id 65489, priority 1.1 million) in every snapshot, ~18 000 bits per snapshot.
+- Client: TimeStamp 17/s, `m_bIgnoreSnapshot` never set, ~63 `UpdateEntity` per snapshot (~1080/s), 0 failures, no "not spawned" warnings. `m_wPlayerID` = 65489 matches the server, but not one update for 65489 arrives.
+
+Conclusion: CryGame on both sides works; ~40% of every snapshot (its tail) is lost between `CXServerSlot::SendUnreliableMsg` -> `m_pISSlot->SendUnreliable` (CryNetwork.dll) and the client. The own player was spawned last, sits at the end of `m_lstNetEntities` and is always in the lost tail; AI at the end of the list freeze the same way. `mp_airstrip` has few entities, so its snapshot fits. Likely the unreliable packet has a size limit (~10 000 bits arrive) and the rest is dropped. Our `sv_maxrate*` = 10000000 makes it worse: the priority threshold falls to ~0 and every candidate is sent.
+
+Fix 1 (done, in the ASI): before every `BuildAndSendSnapshot` the plugin sorts `m_lstNetEntities` by `m_nPriority * time since last send` (std::list node: `+0` next, `+4` prev, `+8` CNetEntityInfo with `+0x10` m_fLastUpdate, `+0x24` m_nPriority). Result on `Pier`: the client now gets its own player in every snapshot (16-17/s) and its position matches the server (e.g. server `815.7,1160.4`, client `815.6,1160.4`). The limit (found): CryNetwork collects a frame's unreliable data in a `CStream` with a fixed stack buffer, `DEFAULT_STREAM_BYTESIZE` 1124 bytes = 8992 bits (`CryCommon/Stream.h`; without an allocator `Resize` returns false). In `CryNetwork.dll` the constant `0x2320` occurs once, in the `CStream` constructor `FUN_34502810`. Writes past it are dropped silently.
+
+Fix 2 (done, in the ASI): hook `CXServerSlot::SendUnreliableMsg` (`0x3306c620`, thiscall, `ret 0x10`, `m_pISSlot` at `+0xa3c`). During a snapshot, `XSERVERMSG_UPDATEENTITY` messages are counted against `SNAP_BUDGET_BITS` = 8000; once the budget is used up, the rest of the snapshot is held back (not sent), and these entities get their old `m_fLastUpdate` back, so their time-affected priority grows and they move to the front of a later snapshot. The client hooks `CXClient::ParseIncomingStream` (`0x3308354b`) to measure packets.
+
+Result on `Pier`: server writes ~1815 updates/s, holds back ~1160, sends ~655; the client receives ~655 `UpdateEntity`/s (100% instead of ~40%), the biggest packet is 7928-8021 bits (< 8992), own player 16-17/s, positions match. Knob: `SNAP_BUDGET_BITS` (overhead seen ~20-100 bits, so up to ~8800 should still fit). Checked in game by the owner (2026-10-18, `Pier`): the client has its weapon and it fires; the rest works too. Open issues: occasional stutter; the crosshair does not turn red when aimed at an enemy (it does in the single-player campaign). `Training` (656 net entities) by the logs: ~680 updates/s sent and received, own player 17/s, biggest packet 7920 bits, positions match. Server crash on `Training` (owner, 2026-10-18): NULL read at `0x330cfe4a` in `CMovieUser::BeginCutScene` (`0x330cfd25`, `GameMovieUser.cpp`): it calls `GetISystem()->GetIInput()->GetIKeyboard()->ClearKeyState()`, and the dedicated server has no input. `EndCutScene` (`0x330cfed6`) does the same. Fix 3 (in the ASI): when `GetIInput()` is NULL both callbacks are skipped. Second crash at the same spot: NULL read at `0x3401a4eb` in `CryMovie.dll` (base `0x34000000`, PE timestamp `0x44ae37b4`): the cutscene sound track key handler `0x3401a396` calls `GetISystem()->GetISoundSystem()->LoadSound(...)`, and the dedicated server has no sound system. Fix 4 (in the ASI): skip only this sound key when `GetISoundSystem()` is NULL; the sequence itself keeps running on the server. Note: the handler is thiscall with 5 arguments (`RET 0x14`); the first hook build took 4 and corrupted the stack (crash at `0x3401046d`), fixed. Third crash at the same spot: `0x34013b53`, another CryMovie sound handler (`0x34013a7b`, same `GetISoundSystem()` pattern; several more exist). Fix 5 (in the mod, systemic): `coop_map` sets `mov_NoCutscenes 1`; `CMovieSystem::PlaySequence` (`0x34017ef9`) then does not start sequences flagged as cutscenes (flags `0x8`/`0x10`), so their sound and input code never runs on the server. Remote clients never saw these cutscenes anyway. Risk: a mission script waiting for a cutscene's end event could stall; not seen yet. Not yet verified at the cutscene.
+
+Stutter: `SNAP_BUDGET_BITS` raised to 8800 (biggest packet 8755 bits, ~750 updates/s delivered, no loss). Measured the longest pause between snapshots (server) and TimeStamps (client) over 29 s on `Training`: 63-94 ms on both sides, so delivery itself is steady. Remaining suspect: each non-own entity gets only ~7 updates/s (750/s shared by ~110 active entities). AI on the dedicated server (owner, 2026-10-19: enemies stand still and do not see the client): not solved yet. Checked: `ESYSUPDATE_MULTIPLAYER` (passed by `CXGame::Update`) does not gate the AI update in `CSystem::Update` (`CrySystem.dll` `0x365151ce`); AI runs if `nPauseMode==0` and an unidentified cvar at `this[0xa18]` is 0. Server cvars: `ai_systemupdate=1`, `ai_ignoreplayer=0`, `es_UpdateAI=1`, `es_UpdateEntities=1`. Every `Player` entity registers as `AIOBJECT_PLAYER` in `Player:OnReset` (`player.lua`). Tried `es_VisCheckForUpdate 0` in `coop_map`: no change.
+
+Next: test other campaign maps.
+
 ## Next steps
 
 1. Spike: start `Training` as an MP server with `g_GameType=Default` and join from a second instance on LAN. Write down what breaks.

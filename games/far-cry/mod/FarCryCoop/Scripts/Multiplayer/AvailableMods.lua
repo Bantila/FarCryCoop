@@ -19,6 +19,12 @@ function CoopMap(name)
 	end
 	AvailableMODList.COOP.mission = mission;
 	setglobal("g_GameType", "COOP");
+	-- cutscene sequences need input and sound, which a dedicated server lacks (crashes in
+	-- CMovieUser::BeginCutScene and CryMovie sound tracks); remote clients never see them anyway
+	setglobal("mov_NoCutscenes", 1);
+	-- entities (AI included) update only when potentially visible from the camera; a dedicated
+	-- server has no player camera, so the AI would stand still (hypothesis, test in game)
+	setglobal("es_VisCheckForUpdate", 0);
 	Game:LoadLevelListen(name);
 end
 Game:AddCommand("coop_map", "CoopMap(%line)", "coop_map <campaign map>: start a campaign map as a co-op server");
