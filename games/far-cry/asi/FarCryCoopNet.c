@@ -85,6 +85,8 @@ static struct {
 	DWORD skip, rx, rxMax;            // server: entity updates held back by the budget; client: packets, biggest in bits
 	DWORD gap, lastAt;                // longest pause in ms between snapshots (server) / TimeStamps (client)
 } s;
+static void *(__cdecl *getISystem)(void); // CryGame GetISystem() at 0x330be6e8
+#define VFN(obj, off) ((*(void ***)(obj))[(off) / 4])
 static DWORD g_lastTick;
 
 static void gap(void) // a stutter shows up as a long pause between two network frames
@@ -102,6 +104,14 @@ static void tick(void)
 		return;
 	g_lastTick = now;
 	if (s.snap || s.upd || s.ts || s.ue)
+		{
+			// CAISystem (CryAISystem.dll): +0x1e4 byte gates CAISystem::Update (0x31020103),
+			// +0x1e0 counts its working passes
+			void *sys = getISystem ? getISystem() : 0;
+			BYTE *ai = sys ? ((BYTE * (__fastcall *)(void *, void *))VFN(sys, 0x7c))(sys, 0) : 0; // GetAISystem
+			if (ai)
+				logf("ai: enabled=%u passes=%u", ai[0x1e4], *(DWORD *)(ai + 0x1e0));
+		}
 		logf("t=%u snap=%u bits=%u upd=%u prio0=%u own=%u(id %u prio %u) | ts=%u ign=%u world=%d ue=%u fail=%u ueIgn=%u my=%u(%u) ids=%u..%u | sent=%u own=%u skip=%u | rx=%u max=%u | gap=%ums | pos=%d,%d,%d",
 			now, s.snap, s.snapBits, s.upd, s.upd0, s.updHi, s.plId, s.plPrio,
 			s.ts, s.tsIgn, s.tsWorld, s.ue, s.ueFail, s.ueIgn, s.myId, s.ueOwn, s.idMin, s.idMax, s.wr, s.wrOwn, s.skip, s.rx, s.rxMax, s.gap, s.px, s.py, s.pz);
@@ -111,7 +121,6 @@ static void tick(void)
 
 // ---- hooks (thiscall emulated with fastcall: ECX = this, EDX unused) ----
 typedef struct { float x, y, z; } Vec3;
-#define VFN(obj, off) ((*(void ***)(obj))[(off) / 4])
 
 static void savePos(void *ent) // IEntity::GetPos(bool bWorldOnly) at vtable +0x04
 {
@@ -310,7 +319,6 @@ static BYTE __fastcall hUe(void *self, void *edx, void *stm)
 // input, so the first cutscene (e.g. in Training) crashes it with a NULL read at 0x330cfe4a.
 // The server shows no cutscene, so on a server without input both callbacks are skipped
 // (in pairs, so the cutscene counter at +0x0c stays consistent).
-static void *(__cdecl *getISystem)(void); // CryGame GetISystem() at 0x330be6e8
 static int noInput(void)
 {
 	void *sys = getISystem();
@@ -348,11 +356,15 @@ static void __fastcall hSoundKey(void *self, void *edx, void *a, DWORD b, DWORD 
 
 static DWORD g_warns;
 static void __cdecl logWarn(const char *fmt, va_list va)
-{
-	char buf[1024];
+{ // log only the raw format: wvsprintfA has no %f, so formatting float arguments could
+  // shift the va_list and make a later %s read a garbage pointer
+	char buf[300];
+	int i;
 	if (++g_warns > 500) // ponytail: hard cap so a spamming warning cannot fill the disk
 		return;
-	wvsprintfA(buf, fmt, va);
+	for (i = 0; i < 299 && fmt[i]; i++)
+		buf[i] = fmt[i];
+	buf[i] = 0;
 	logf("warn: %s", buf);
 }
 
