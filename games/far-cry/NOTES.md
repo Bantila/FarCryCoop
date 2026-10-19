@@ -130,4 +130,4 @@ Open bug: `GameEvent:OnTimer` (checkpoint save) reads `_localplayer`, which is n
 4. Occasional stutter: non-own entities get ~7 updates/s under the snapshot budget.
 5. Launcher / Steam P2P transport: postponed by the owner (2026-10-19). Weapon choice goes into the launcher too.
 6. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).
-7. After the optimizations: mission select by any player, friendly fire, `coop_dmg`, RocketMod: see [PLAN-fun-mode.md](PLAN-fun-mode.md).
+7. After the optimizations: host admin panel (in-game, no console), mission select by any player, friendly fire, `coop_dmg`, RocketMod: see [PLAN-fun-mode.md](PLAN-fun-mode.md).
