@@ -22,10 +22,15 @@ function CoopMap(name)
 	-- cutscene sequences need input and sound, which a dedicated server lacks (crashes in
 	-- CMovieUser::BeginCutScene and CryMovie sound tracks); remote clients never see them anyway
 	setglobal("mov_NoCutscenes", 1);
+	if (COOP_Map) then
+		Game:LoadLevelMPServer(name, mission); -- server already up: keep the clients connected
+	else
+		Game:LoadLevelListen(name);
+	end
 	COOP_Map = name;
-	Game:LoadLevelListen(name);
 end
 Game:AddCommand("coop_map", "CoopMap(%line)", "coop_map <campaign map>: start a campaign map as a co-op server");
+Game:AddCommand("coop_restart", "if (COOP_Map) then CoopMap(COOP_Map) end", "coop_restart: reload the current co-op map, clients stay connected");
 
 -- FarCryCoop test commands for the host (server console) ------------------------------------
 
