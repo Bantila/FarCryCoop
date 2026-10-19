@@ -124,7 +124,9 @@ Open bug: `GameEvent:OnTimer` (checkpoint save) reads `_localplayer`, which is n
 
 ## Next steps
 
-1. Spike: start `Training` as an MP server with `g_GameType=Default` and join from a second instance on LAN. Write down what breaks.
-2. Download CryENGINE MOD SDK 1.4 into `Downloadsarcry-sdk-1.4\`, check SHA-256, read `CXServer`/`CXClient`/game-rules code.
-3. Steam P2P transport: check where `CryNetwork.dll` opens its UDP socket, to plan a tunnel for the launcher.
-4. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).
+1. Verify in game (written without a run, owner was busy): AI after `coop_restart`, `coop_save`/`coop_load`, the forwarded heli sequence on `Pier`, `coop_weapons`.
+2. Fix checkpoints on the dedicated server: `GameEvent:OnTimer` reads `_localplayer`.
+3. Real engine saves (option A of the saves recon), after the lightweight `coop_save`.
+4. Occasional stutter: non-own entities get ~7 updates/s under the snapshot budget.
+5. Launcher / Steam P2P transport: postponed by the owner (2026-10-19).
+6. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).
