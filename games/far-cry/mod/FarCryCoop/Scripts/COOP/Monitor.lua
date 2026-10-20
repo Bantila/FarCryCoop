@@ -1,4 +1,4 @@
--- FarCryCoop monitor: once a second the server ("S") and every client ("C") log the same "MON"
+﻿-- FarCryCoop monitor: once a second the server ("S") and every client ("C") log the same "MON"
 -- lines, so tools/mon-diff.ps1 can compare what each side sees:
 --   MON S t=12 P <id> <name> pos=x,y,z hp= ar= w= clip= ammo= veh=      players
 --   MON S t=12 A <id> <name> pos=x,y,z hp= beh= tgt=                   AI near players
@@ -54,15 +54,17 @@ function CoopMonitor(side)
 		System:LogAlways(format("%s P %d %s pos=%.1f,%.1f,%.1f hp=%s ar=%s w=%s clip=%s ammo=%s veh=%s", head, P.id,
 			P:GetName(), pos.x, pos.y, pos.z, tostring(c.health), tostring(c.armor), tostring(w),
 			tostring(c.ammo_in_clip), tostring(c.ammo), veh));
-		local l = last[P.id];
+		local key = P:GetName(); -- not the id: a respawned player is a new entity
+		local l = last[key];
 		if (l) then
 			local alive = (c.health or 0) > 0;
-			if (l.alive and not alive) then CoopMonEvent(side, "death "..P:GetName()); end
+			if (l.id ~= P.id) then CoopMonEvent(side, "respawn "..P:GetName().." (new entity)");
+			elseif (l.alive and not alive) then CoopMonEvent(side, "death "..P:GetName()); end
 			if (alive and not l.alive) then CoopMonEvent(side, "spawn "..P:GetName()); end
 			if (l.w ~= w) then CoopMonEvent(side, format("weapon %s %s->%s", P:GetName(), tostring(l.w), tostring(w))); end
 			if (l.veh ~= veh) then CoopMonEvent(side, format("vehicle %s %s->%s", P:GetName(), l.veh, veh)); end
 		end
-		last[P.id] = {alive = (c.health or 0) > 0, w = w, veh = veh};
+		last[key] = {id = P.id, alive = (c.health or 0) > 0, w = w, veh = veh};
 	end
 	if (getn(players) == 0) then return; end
 	for i, e in System:GetEntities() do

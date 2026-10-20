@@ -36,14 +36,58 @@ COOP_MELEE_DELAY = 0.35
 COOP_MELEE_PERIOD = 1.2
 COOP_MeleeContact = {}
 COOP_MeleeDue = {}
-function CoopWrapMelee()
-	for name, b in AIBehaviour do
-		if (type(b) == "table" and b.OnCloseContact and not b.COOP_Melee) then
-			b.COOP_Melee = 1;
-			local old = b.OnCloseContact;
-			b.OnCloseContact = function(self, entity, sender)
-				COOP_MeleeContact[entity.id] = 1;
-				return %old(self, entity, sender);
+-- AI behaviours compare players with _localplayer (nil on a dedicated server, the host on a
+-- listen server): "retaliate against who shot me", the trigen jump, cars and boats (which even
+-- index _localplayer.theVehicle and break). While any behaviour function runs, _localplayer is
+-- the player this AI deals with: the sender if it is a player, else its attention target if it
+-- is a player, else the nearest player. Errors are caught so _localplayer is always restored,
+-- and logged once per function.
+COOP_AIPlayers = {}
+function CoopAIPlayer(entity, sender)
+	if (type(sender) == "table" and sender.classname == "Player") then return sender; end
+	local t = AI:GetAttentionTargetOf(entity.id);
+	if (type(t) == "table" and t.classname == "Player") then return t; end
+	local best, bd, p = nil, nil, entity:GetPos();
+	for i, P in COOP_AIPlayers do
+		local q = P:GetPos();
+		local d = (p.x-q.x)*(p.x-q.x) + (p.y-q.y)*(p.y-q.y) + (p.z-q.z)*(p.z-q.z);
+		if (not bd or d < bd) then best, bd = P, d; end
+	end
+	return best;
+end
+function CoopWrapBehaviour(bname, fname, old)
+	local where = bname.."."..fname;
+	return function(...)
+		local saved, entity, where = _localplayer, arg[2], %where; -- Lua 4: upvalues reach one level only
+		if (type(entity) == "table" and entity.id) then
+			_localplayer = CoopAIPlayer(entity, arg[3]) or saved;
+		end
+		local r = call(%old, arg, "x", function(msg)
+			if (not COOP_AIErrors[%where]) then
+				COOP_AIErrors[%where] = 1;
+				System:LogAlways("coop: AI error in "..%where..": "..tostring(msg));
+			end
+		end);
+		_localplayer = saved;
+		return r;
+	end
+end
+if (not COOP_AIErrors) then COOP_AIErrors = {}; end
+
+-- behaviours load on demand, so this runs once a second for new ones
+function CoopWrapBehaviours()
+	for bname, b in AIBehaviour do
+		if (type(b) == "table" and not b.COOP_Wrapped) then
+			b.COOP_Wrapped = 1;
+			for fname, f in b do
+				if (type(f) == "function") then b[fname] = CoopWrapBehaviour(bname, fname, f); end
+			end
+			if (b.OnCloseContact) then
+				local old = b.OnCloseContact;
+				b.OnCloseContact = function(self, entity, sender)
+					COOP_MeleeContact[entity.id] = 1;
+					return %old(self, entity, sender);
+				end
 			end
 		end
 	end
@@ -85,6 +129,7 @@ end
 
 function GameRules:OnUpdate(DeltaTime)
 	CoopPreloadWeapons()
+	COOP_AIPlayers = CoopPlayers() -- for CoopAIPlayer; every frame, players respawn as new entities
 	CoopMonitor("S")
 	CoopUpdateMelee()
 	if COOP_God == 1 then -- coop_god: refill every frame
@@ -95,7 +140,7 @@ function GameRules:OnUpdate(DeltaTime)
 	-- _time restarts with every map load, but Lua globals survive coop_restart
 	if _time < COOP_NextWake and COOP_NextWake - _time <= 1 then return end
 	COOP_NextWake = _time + 1
-	CoopWrapMelee() -- behaviours can load later, so look for new ones once a second
+	CoopWrapBehaviours()
 	if COOP_PendingLoad then CoopApplyLoad(); end
 	local players = {}
 	for i, P in CoopPlayers() do
