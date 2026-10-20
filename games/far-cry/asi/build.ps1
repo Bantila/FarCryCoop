@@ -13,6 +13,7 @@ $imports = [ordered]@{
     FlushInstructionCache = 12; GetCurrentProcess = 0; GetCurrentProcessId = 0; CreateThread = 24; Sleep = 4
     CreateFileA = 28; WriteFile = 20; GetTickCount = 0; DisableThreadLibraryCalls = 4; lstrcmpiA = 8 }
   user32 = [ordered]@{ wvsprintfA = 12 }
+  winmm = [ordered]@{ timeBeginPeriod = 4 }
 }
 # An import library is a by-product of linking a stub DLL with the same stdcall exports:
 # symbols stay decorated (_Sleep@4) while the imported names are plain (Sleep).
@@ -32,5 +33,5 @@ foreach ($l in $imports.Keys) {
 & "$bin\cl.exe" /nologo /c /O1 /GS- /W3 /Zl "/I$msvc\include" "/Fo$Out\FarCryCoopNet.obj" "$PSScriptRoot\FarCryCoopNet.c"
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 & "$bin\link.exe" /nologo /dll /nodefaultlib /entry:DllMain /safeseh:no /machine:x86 `
-  "/out:$Out\FarCryCoopNet.asi" "$Out\FarCryCoopNet.obj" "$Out\kernel32.lib" "$Out\user32.lib"
+  "/out:$Out\FarCryCoopNet.asi" "$Out\FarCryCoopNet.obj" "$Out\kernel32.lib" "$Out\user32.lib" "$Out\winmm.lib"
 exit $LASTEXITCODE

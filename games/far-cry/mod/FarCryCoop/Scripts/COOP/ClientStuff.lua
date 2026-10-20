@@ -5,12 +5,16 @@ Script:LoadScript("scripts/COOP/Monitor.lua");
 -- Campaign missions list only a few weapons in <Weapons><Used>; the server loads the rest on demand,
 -- a remote client never does, so it cannot select, draw or fire them. OnInit runs after the level
 -- is loaded and before the server sends the player, so load every weapon class here.
+COOP_UPDATE_RATE = 50
 Coop_DefaultClientOnInit = ClientStuff.OnInit;
 function ClientStuff:OnInit()
 	Coop_DefaultClientOnInit(self);
 	for name, def in WeaponClassesEx do
 		Game:AddWeapon(name);
 	end
+	-- A snapshot holds only 8992 bits and a campaign map has hundreds of entities: ask for more
+	-- snapshots than the default 20 a second (the server caps it at sv_maxupdaterate, 50)
+	if (Client and Client.SetUpdateRate) then Client:SetUpdateRate(COOP_UPDATE_RATE); end
 	CoopMonEvent("C", "map");
 end
 
@@ -18,6 +22,23 @@ Coop_DefaultClientOnUpdate = ClientStuff.OnUpdate;
 function ClientStuff:OnUpdate()
 	Coop_DefaultClientOnUpdate(self);
 	CoopMonitor("C");
+end
+
+-- The server dropped a player from a vehicle (COOP gamerules CoopWrapReleaseUser). The paraglider
+-- has no client OnUnBind, so without this the client kept gliding where the server had no
+-- paraglider. Vehicles that do have OnUnBind already let go: their seat is empty by now.
+ClientStuff.ServerCommandTable["VEHOUT"] = function(String, toktable)
+	if (Game:IsServer() or not VC) then return; end
+	local v, p = System:GetEntity(tonumber(toktable[2]) or 0), System:GetEntity(tonumber(toktable[3]) or 0);
+	if (not v or not p) then return; end
+	local seats = {v.driverT, v.gunnerT};
+	for i, t in (v.passengersTT or {}) do tinsert(seats, t); end
+	for i, t in seats do
+		if (type(t) == "table" and t.entity == p) then
+			CoopMonEvent("C", "vehout "..v:GetName());
+			VC.ReleaseUser(v, t);
+		end
+	end
 end
 
 -- Client-side hit detection: the shooter's own client decides what its bullets hit and tells
@@ -67,6 +88,8 @@ Coop_DefaultOnSetPlayer = ClientStuff.OnSetPlayer;
 function ClientStuff:OnSetPlayer()
 	Coop_DefaultOnSetPlayer(self);
 	if (not Game:IsServer()) then Client:SendCommand("HUDSYNC"); end
+	-- again once connected: asked in OnInit only, the server kept sending the default 20
+	if (Client and Client.SetUpdateRate) then Client:SetUpdateRate(COOP_UPDATE_RATE); end
 end
 
 -- AI animation started by the server (melee swing, see COOP gamerules CoopUpdateMelee)

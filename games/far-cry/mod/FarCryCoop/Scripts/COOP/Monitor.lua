@@ -7,6 +7,7 @@
 -- Loaded by COOP gamerules (server) and COOP ClientStuff (client). coop_monitor 0/1 toggles it.
 COOP_MON_AI_RADIUS = 60
 COOP_MON_VEH_RADIUS = 150
+COOP_MON_OBJ_RADIUS = 15
 if (COOP_MonitorOn == nil) then COOP_MonitorOn = 1; end
 COOP_MonNext = {} -- per side, _time of the next sample
 COOP_MonLast = {} -- per side and player id, last state for events
@@ -91,6 +92,16 @@ function CoopMonitor(side)
 					CoopMonEvent(side, format("trigger %s %s->%s", e:GetName(), last[key], st));
 				end
 				last[key] = st;
+			elseif (e.type ~= "Player") then
+				-- loose objects (barrels, crates) near players: did they move, on which side
+				local p, key = CoopMonPos(e), "pos"..e.id;
+				if (CoopMonNear(p, players, COOP_MON_OBJ_RADIUS)) then
+					local q = last[key];
+					if (q and (p.x-q.x)*(p.x-q.x) + (p.y-q.y)*(p.y-q.y) + (p.z-q.z)*(p.z-q.z) > 0.04) then
+						CoopMonEvent(side, format("moved %d %s %s pos=%.1f,%.1f,%.1f", e.id, e:GetName(), tostring(e.classname), p.x, p.y, p.z));
+					end
+					last[key] = p;
+				end
 			end
 		end
 	end

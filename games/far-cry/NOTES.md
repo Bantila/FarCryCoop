@@ -150,12 +150,26 @@ Fix 7 (ASI, done): the `je` at `0x330ae17e` in `CPlayer::Update` (skips the area
 
 The village still slept: `AreaTrigger80` does not wake it. Fix 8 (mod): `bSleepOnSpawn` puppets wake once a player is within `COOP_SLEEPER_RADIUS` = 40 m, and any sleeper that takes damage wakes at once. Owner: the AI works now. Open: strong lag on the client while standing on an enemy's body; server snapshots stay at 15-17/s (longest pause 172 ms) and client packets at ~88 ms, so it is not the network, likely client prediction against the AI body.
 
+## Spike 8 — checkpoints, paraglider exit, server frame rate (2026-10-20)
+
+Checkpoints: the client always respawned at the map start. `GameEvent:OnTimer` (a mission save trigger's `Save` event) reads `_localplayer`, nil on the dedicated server, so `_LastCheckPPos` was never set and `GameRules:RespawnPlayer` fell back to the first spawn point. COOP gamerules wrap each `GameEvent`'s `OnTimer` (once a second, per entity) to run with the nearest living player as `_localplayer`; monitor event `checkpoint <name> at x,y,z`. Not yet seen in game: the paraglider bug below kept the server from reaching the save trigger.
+
+Paraglider: the server dropped the player when `Gunship1` flew into the paraglider (`Paraglider:OnContactServer`: a collider other than the driver means everyone out), but the client kept gliding: `Paraglider.Client` has no `OnUnBind` (every other vehicle has `VC.OnUnBind`), and patching it on the client did not help. The server now broadcasts `VEHOUT <vehicle> <player>` from a wrapped `VC.ReleaseUser`, and the client releases that seat itself. Verified: the client gets out together with the server. With the client gliding on, the server had counted triggers along its own, different path (`saveTrigger56` fired only on the client).
+
+Gunship and props are not synced: level entities spawn with `ed.netPresence = false` (`XSystemBase.cpp`); only players, AI and vehicle-class entities (`CVehicle` calls `SetNetPresence(true)`) are ever sent. `Gunship` (class 102, `AI/Gunship.lua`) is not a vehicle class: it flies on the server and stays at its start on the client; pushed barrels never move there. Giving net presence to every entity that moves on the server broke respawn: the client then gets updates for entities it never created (`entity 3 updated but not spawned`), and `CXClient::OnServerMsgUpdateEntity` returns false, which drops the rest of the packet, the own player's updates included. Net presence must only go to entities every client has.
+
+Server frame rate: `FarCry_WinSV.exe` sleeps between frames (`sv_DedicatedMaxRate` 80), and with the default 15.6 ms timer resolution each `Sleep` lasts a whole tick: the server ran at ~17 frames and snapshots a second on 12% of a core. Windows 10 2004+ keeps the timer resolution per process, so Fix 9 (ASI) calls `timeBeginPeriod(1)` on `FarCry_WinSV`: 35-36 snapshots a second, the owner sees smoother enemies. The client also asks for 50 updates a second (`Client:SetUpdateRate`, again in `OnSetPlayer`: asked only in `OnInit`, it was lost), and the server no longer broadcasts AI idle animations (`ANIM ... idle*`, ~5 reliable messages a second).
+
+Rejected: a CryGame.dll rebuilt from the 1.4 SDK. It needs VC 7.1 (Visual C++ Toolkit 2003) and the SDK's STLport 4.6, because STLport strings cross every engine interface (`CrySystem` reads `ISystem::LoadConfiguration(const string&)` as STLport); with VS 2022 or MS STL it crashed. It ran with both, but each round was a slow rebuild, it disabled `FarCry.WidescreenFix.asi` and our own ASI, and gave no gain the owner could see. Fixes stay in the ASI.
+
+Monitor: `moved <id> <name> <class>` for loose objects within 15 m of a player whose position changed.
+
 ## Next steps
 
-1. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks), the paraglider exit, the lag; then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
-2. Fix checkpoints on the dedicated server: `GameEvent:OnTimer` reads `_localplayer`.
-3. Real engine saves (option A of the saves recon), after the lightweight `coop_save`.
-4. Occasional stutter: non-own entities get ~7 updates/s under the snapshot budget.
+1. Gunship and props: net presence for entity classes every client has (`Gunship`, `CargoChopper`, rigid bodies), not for whatever moves. Then check pushed barrels on the server.
+2. Verify checkpoints in game (Pier `saveTrigger56`, Training `saveTrigger3`).
+3. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks), enemies jerking on the client (the client moves them more often than the server does: extrapolation between updates); then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
+4. Real engine saves (option A of the saves recon), after the lightweight `coop_save`.
 5. Launcher / Steam P2P transport: postponed by the owner (2026-10-19). Weapon choice goes into the launcher too.
 6. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).
 7. After the optimizations: host admin panel (in-game, no console), mission select by any player, friendly fire, `coop_dmg`, RocketMod: see [PLAN-fun-mode.md](PLAN-fun-mode.md).

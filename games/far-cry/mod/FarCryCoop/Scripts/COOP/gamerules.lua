@@ -46,7 +46,8 @@ function CoopAnimStarted(e, anim)
 	e.COOP_AnimNext = e.COOP_AnimNext or {};
 	if (_time < (e.COOP_AnimNext[anim] or 0) and e.COOP_AnimNext[anim] - _time < 30) then return; end
 	e.COOP_AnimNext[anim] = _time + max(e:GetAnimationLength(anim) or 0, 0.3);
-	Server:BroadcastCommand("ANIM "..e.id.." "..anim);
+	-- idle animations of every AI on the map were ~5 reliable messages a second for nothing
+	if (strsub(anim, 1, 4) ~= "idle") then Server:BroadcastCommand("ANIM "..e.id.." "..anim); end
 	for i, ev in (e.SoundEvents or {}) do
 		if (ev[1] == anim and type(ev[3]) == "number" and ev[3] ~= KEYFRAME_BREATH_SOUND) then
 			tinsert(COOP_KeyDue, {t = _time + ev[2] / COOP_ANIM_FPS, id = e.id, number = ev[3]});
@@ -94,13 +95,54 @@ function CoopAIPlayer(entity, sender)
 	if (type(sender) == "table" and sender.classname == "Player") then return sender; end
 	local t = AI:GetAttentionTargetOf(entity.id);
 	if (type(t) == "table" and t.classname == "Player") then return t; end
+	return CoopNearestPlayer(entity);
+end
+-- nearest living player to an entity
+function CoopNearestPlayer(entity)
 	local best, bd, p = nil, nil, entity:GetPos();
 	for i, P in COOP_AIPlayers do
-		local q = P:GetPos();
-		local d = (p.x-q.x)*(p.x-q.x) + (p.y-q.y)*(p.y-q.y) + (p.z-q.z)*(p.z-q.z);
-		if (not bd or d < bd) then best, bd = P, d; end
+		if (BasicPlayer.IsAlive(P)) then
+			local q = P:GetPos();
+			local d = (p.x-q.x)*(p.x-q.x) + (p.y-q.y)*(p.y-q.y) + (p.z-q.z)*(p.z-q.z);
+			if (not bd or d < bd) then best, bd = P, d; end
+		end
 	end
 	return best;
+end
+
+-- A vehicle that drops a player on the server (the paraglider hit by the gunship, landing on
+-- water) must drop him on the clients too: the paraglider's client table has no OnUnBind, so the
+-- client kept gliding. Tell the clients ("VEHOUT <vehicle> <player>", COOP ClientStuff).
+-- VC loads with the first vehicle class, so this is checked once a second.
+function CoopWrapReleaseUser()
+	if (not VC or VC.COOP_Wrapped) then return; end
+	VC.COOP_Wrapped = 1;
+	local old = VC.ReleaseUser;
+	VC.ReleaseUser = function(self, aTable, a, b)
+		local p = aTable and aTable.entity;
+		local r = %old(self, aTable, a, b);
+		if (p and p.classname == "Player") then Server:BroadcastCommand("VEHOUT "..self.id.." "..p.id); end
+		return r;
+	end
+end
+
+-- Checkpoints: GameEvent:OnTimer (Event_Save of a mission's save trigger) reads _localplayer, so
+-- on a dedicated server it failed and never set _LastCheckPPos: players respawned at the map
+-- start. Run it with the nearest living player as _localplayer; everyone respawns there.
+function CoopWrapGameEvent(e)
+	e.COOP_Wrapped = 1;
+	local old = e.OnTimer;
+	e.OnTimer = function(self, a, b)
+		local saved = _localplayer;
+		_localplayer = CoopNearestPlayer(self) or saved;
+		if (_localplayer) then
+			call(%old, {self, a, b}, "x", function(msg) System:LogAlways("coop: checkpoint error: "..tostring(msg)); end);
+			if (_LastCheckPPos and not self.bSaveNow) then
+				CoopMonEvent("S", format("checkpoint %s at %.1f,%.1f,%.1f", self:GetName(), _LastCheckPPos.x, _LastCheckPPos.y, _LastCheckPPos.z));
+			end
+		end
+		_localplayer = saved;
+	end
 end
 function CoopWrapBehaviour(bname, fname, old)
 	local where = bname.."."..fname;
@@ -161,6 +203,7 @@ function GameRules:OnUpdate(DeltaTime)
 	COOP_NextWake = _time + 1
 	CoopWrapBehaviours()
 	CoopWrapHud()
+	CoopWrapReleaseUser()
 	if COOP_PendingLoad then CoopApplyLoad(); end
 	local players = {}
 	for i, P in CoopPlayers() do
@@ -171,6 +214,7 @@ function GameRules:OnUpdate(DeltaTime)
 	local wake2, sleeper2 = COOP_WAKE_RADIUS * COOP_WAKE_RADIUS, COOP_SLEEPER_RADIUS * COOP_SLEEPER_RADIUS
 	for i, e in System:GetEntities() do
 		if e.ai and not e.COOP_AnimWrapped then CoopWrapAnim(e) end
+		if e.classname == "GameEvent" and not e.COOP_Wrapped then CoopWrapGameEvent(e) end
 		if e.Behaviour and e.cnt and e.Properties and e.Properties.species and not e.COOP_Awake
 			and e.Enemy_Hidden ~= 1 then
 			local r2 = (e.Properties.bSleepOnSpawn == 1) and sleeper2 or wake2

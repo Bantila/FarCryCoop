@@ -37,6 +37,7 @@ API(DWORD) GetTickCount(void);
 API(BOOL) DisableThreadLibraryCalls(HANDLE);
 API(int) lstrcmpiA(const char *, const char *);
 API(int) wvsprintfA(char *, const char *, va_list);
+API(DWORD) timeBeginPeriod(DWORD);
 
 int _fltused = 1;
 
@@ -514,6 +515,12 @@ BOOL __stdcall DllMain(HANDLE self, DWORD reason, void *reserved)
 		if (*p == '.')
 			*p = 0;
 	g_server = !lstrcmpiA(name, "FarCry_WinSV");
+	// FIX 9: FarCry_WinSV.exe sleeps between frames (sv_DedicatedMaxRate 80), and with the
+	// default 15.6 ms timer resolution every Sleep lasts a whole tick: the server ran at ~17
+	// frames and snapshots a second on 12% of a core (38 with this, measured). Windows 10 2004+
+	// keeps the resolution per process, so the server has to ask for it itself.
+	if (g_server)
+		timeBeginPeriod(1);
 	n = (int)GetModuleFileNameA(self, path, 260);
 	while (n > 0 && cut < 2) // strip "\FarCryCoopNet.asi" and "\Bin32"
 		if (path[--n] == '\\')
