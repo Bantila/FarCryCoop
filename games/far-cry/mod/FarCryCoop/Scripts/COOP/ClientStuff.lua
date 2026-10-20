@@ -47,6 +47,28 @@ ClientStuff.ServerCommandTable["NOCLIP"] = function(String, toktable)
 	if (_localplayer and CoopSetNoclip) then CoopSetNoclip(_localplayer, tonumber(toktable[2]) or 0); end
 end
 
+-- Mission objectives and messages from the server (COOP gamerules CoopWrapHud). The
+-- listen-server host already ran them on its own Hud.
+ClientStuff.ServerCommandTable["MHUD"] = function(String, toktable)
+	if (Game:IsServer() or not Hud) then return; end
+	local op = toktable[2];
+	local text = strsub(String, strlen("MHUD "..tostring(op).." ") + 1);
+	-- the dedicated server has no string table: Localize("X") gave it "@X", translate here
+	if (strsub(text, 1, 1) == "@" and op ~= "radar") then text = Localize(strsub(text, 2)); end
+	CoopMonEvent("C", "hud "..tostring(op).." "..text);
+	if (op == "msg") then Hud:AddMessage(text);
+	elseif (op == "push") then Hud:PushObjective({}, text);
+	elseif (op == "done") then Hud:CompleteObjective(text);
+	elseif (op == "flash") then Hud:FlashObjectives();
+	elseif (op == "radar") then Hud:SetRadarObjective(text); end
+end
+-- ask for the objectives given before we joined
+Coop_DefaultOnSetPlayer = ClientStuff.OnSetPlayer;
+function ClientStuff:OnSetPlayer()
+	Coop_DefaultOnSetPlayer(self);
+	if (not Game:IsServer()) then Client:SendCommand("HUDSYNC"); end
+end
+
 -- AI animation started by the server (melee swing, see COOP gamerules CoopUpdateMelee)
 ClientStuff.ServerCommandTable["ANIM"] = function(String, toktable)
 	local e = System:GetEntity(tonumber(toktable[2]) or 0);

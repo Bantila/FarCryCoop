@@ -1,4 +1,4 @@
-﻿-- FarCryCoop monitor: once a second the server ("S") and every client ("C") log the same "MON"
+-- FarCryCoop monitor: once a second the server ("S") and every client ("C") log the same "MON"
 -- lines, so tools/mon-diff.ps1 can compare what each side sees:
 --   MON S t=12 P <id> <name> pos=x,y,z hp= ar= w= clip= ammo= veh=      players
 --   MON S t=12 A <id> <name> pos=x,y,z hp= beh= tgt=                   AI near players
@@ -84,6 +84,13 @@ function CoopMonitor(side)
 					System:LogAlways(format("%s V %d %s pos=%.1f,%.1f,%.1f drv=%s", head, e.id, e:GetName(),
 						p.x, p.y, p.z, d and d:GetName() or "-"));
 				end
+			elseif (e.classname == "AreaTrigger") then
+				-- mission progress: every state change (enter/leave) and enable/disable, map-wide
+				local st, key = tostring(e:GetState()).."/"..tostring(e.Enabled), "trg"..e.id;
+				if (last[key] and last[key] ~= st) then
+					CoopMonEvent(side, format("trigger %s %s->%s", e:GetName(), last[key], st));
+				end
+				last[key] = st;
 			end
 		end
 	end

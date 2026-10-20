@@ -20,22 +20,69 @@ end
 
 -- On a dedicated server the AI puppets stay asleep: they stand still and never notice
 -- anyone (the single-player game wakes them around its local player). Once a second wake
--- the puppets near any player. Puppets placed asleep on purpose (bSleepOnSpawn) or hidden
--- (Event_Hide) are left to their mission triggers.
+-- the puppets near any player. Hidden puppets (Event_Hide) are left to their mission triggers.
 COOP_WAKE_RADIUS = 150 -- ponytail: fixed radius, tune if far snipers or patrols stay frozen
+-- Puppets placed asleep (bSleepOnSpawn) wait for a mission trigger, and some of those triggers
+-- never reach them on a dedicated server (Training's first village slept with the player
+-- standing in it and shooting them). Wake them once a player is this close, or hits them.
+COOP_SLEEPER_RADIUS = 40
 COOP_NextWake = 0
 
--- AI melee without animations. The server deals AI melee damage on the KEYFRAME_APPLY_MELEE
--- animation event, but a dedicated server never ticks character animations (nothing is rendered),
--- so mutants run up and stand there. Every behaviour's OnCloseContact (it starts the melee
--- animation, every frame while in contact) marks the entity; COOP_MELEE_DELAY later the
--- keyframe handler runs as if the animation had reached the hit, at most every COOP_MELEE_PERIOD.
--- A real keyframe (listen-server host watching) cancels the pending fake one.
--- ponytail: fixed timing for every AI, read it from the melee animation length if it feels off
-COOP_MELEE_DELAY = 0.35
-COOP_MELEE_PERIOD = 1.2
-COOP_MeleeContact = {}
-COOP_MeleeDue = {}
+-- AI animation keyframes without animations. A dedicated server never ticks character
+-- animations (nothing is rendered), so no animation event ever arrives, and AI actions that wait
+-- for one never happen: melee hits (KEYFRAME_APPLY_MELEE), drawing the gun (HOLD_GUN), the big
+-- mutant's rocket (FIRE_*), job attachments. Every AI animation started from Lua goes through
+-- entity:StartAnimation or entity:InsertAnimationPipe: those are wrapped per entity, and the
+-- keyframes of that animation (entity.SoundEvents = AI_ANIM_KEYFRAMES of its KEYFRAME_TABLE,
+-- {anim, frame, number}) run frame/COOP_ANIM_FPS seconds later through the normal keyframe
+-- handler. The animation is also sent to the clients ("ANIM"): AI animations are not replicated.
+-- A real keyframe (listen-server host watching that AI) cancels the pending fake one.
+-- Animations the engine starts itself (jumps, locomotion) are not covered.
+COOP_ANIM_FPS = 30
+COOP_KeyDue = {} -- {t, id, number}
+function CoopAnimStarted(e, anim)
+	if (type(anim) ~= "string" or not e.cnt or e.cnt.health <= 0) then return; end
+	-- behaviours re-insert the same animation while it plays: once per animation length
+	e.COOP_AnimNext = e.COOP_AnimNext or {};
+	if (_time < (e.COOP_AnimNext[anim] or 0) and e.COOP_AnimNext[anim] - _time < 30) then return; end
+	e.COOP_AnimNext[anim] = _time + max(e:GetAnimationLength(anim) or 0, 0.3);
+	Server:BroadcastCommand("ANIM "..e.id.." "..anim);
+	for i, ev in (e.SoundEvents or {}) do
+		if (ev[1] == anim and type(ev[3]) == "number" and ev[3] ~= KEYFRAME_BREATH_SOUND) then
+			tinsert(COOP_KeyDue, {t = _time + ev[2] / COOP_ANIM_FPS, id = e.id, number = ev[3]});
+		end
+	end
+end
+function CoopWrapAnim(e)
+	e.COOP_AnimWrapped = 1;
+	local start, pipe = e.StartAnimation, e.InsertAnimationPipe;
+	e.StartAnimation = function(self, pos, anim, a, b, c)
+		CoopAnimStarted(self, anim);
+		return %start(self, pos, anim, a, b, c);
+	end
+	e.InsertAnimationPipe = function(self, anim, a, b, c, d)
+		CoopAnimStarted(self, anim);
+		return %pipe(self, anim, a, b, c, d);
+	end
+end
+function CoopUpdateKeys()
+	local keep, k = {}, 0;
+	for i = 1, getn(COOP_KeyDue) do
+		local d = COOP_KeyDue[i];
+		if (_time >= d.t or d.t - _time > 10) then -- second test: _time restarted on map load
+			local e = System:GetEntity(d.id);
+			if (e and e.cnt and e.cnt.health > 0) then
+				CoopMonEvent("S", "key "..e:GetName().." "..d.number); -- same as sp-monitor
+				COOP_FakeKey = 1;
+				BasicPlayer.Server_EventHandler[ScriptEvent_AnimationKey](e, {number = d.number});
+				COOP_FakeKey = nil;
+			end
+		else
+			k = k + 1; keep[k] = d;
+		end
+	end
+	COOP_KeyDue = keep;
+end
 -- AI behaviours compare players with _localplayer (nil on a dedicated server, the host on a
 -- listen server): "retaliate against who shot me", the trigen jump, cars and boats (which even
 -- index _localplayer.theVehicle and break). While any behaviour function runs, _localplayer is
@@ -82,13 +129,6 @@ function CoopWrapBehaviours()
 			for fname, f in b do
 				if (type(f) == "function") then b[fname] = CoopWrapBehaviour(bname, fname, f); end
 			end
-			if (b.OnCloseContact) then
-				local old = b.OnCloseContact;
-				b.OnCloseContact = function(self, entity, sender)
-					COOP_MeleeContact[entity.id] = 1;
-					return %old(self, entity, sender);
-				end
-			end
 		end
 	end
 end
@@ -96,42 +136,21 @@ if (not COOP_OrigAnimKey) then
 	COOP_OrigAnimKey = BasicPlayer.Server_EventHandler[ScriptEvent_AnimationKey];
 end
 BasicPlayer.Server_EventHandler[ScriptEvent_AnimationKey] = function(self, Params)
-	if (not COOP_FakeKey and type(Params) == "table" and Params.number == KEYFRAME_APPLY_MELEE) then
-		COOP_MeleeDue[self.id] = nil; -- the real animation got there
+	if (not COOP_FakeKey and type(Params) == "table" and Params.number) then
+		-- the real animation got there: drop the pending fake keyframe
+		for i = getn(COOP_KeyDue), 1, -1 do
+			local d = COOP_KeyDue[i];
+			if (d.id == self.id and d.number == Params.number) then tremove(COOP_KeyDue, i); break; end
+		end
 	end
 	return COOP_OrigAnimKey(self, Params);
-end
-function CoopUpdateMelee()
-	for id, v in COOP_MeleeContact do
-		local e = System:GetEntity(id);
-		if (e and not COOP_MeleeDue[id] and _time >= (e.COOP_MeleeNext or 0)) then
-			COOP_MeleeDue[id] = _time + COOP_MELEE_DELAY;
-			e.COOP_MeleeNext = _time + COOP_MELEE_PERIOD;
-			-- AI animations are not sent over the network: tell the clients to play the swing
-			if ((e.MELEE_ANIM_COUNT or 0) > 0) then
-				Server:BroadcastCommand(format("ANIM %d attack_melee%d", id, random(1, e.MELEE_ANIM_COUNT)));
-			end
-		end
-	end
-	COOP_MeleeContact = {};
-	for id, t in COOP_MeleeDue do
-		if (_time >= t or t - _time > COOP_MELEE_DELAY) then -- second test: _time restarted on map load
-			COOP_MeleeDue[id] = nil;
-			local e = System:GetEntity(id);
-			if (e and e.cnt and e.cnt.health > 0) then
-				COOP_FakeKey = 1;
-				BasicPlayer.Server_EventHandler[ScriptEvent_AnimationKey](e, {number = KEYFRAME_APPLY_MELEE});
-				COOP_FakeKey = nil;
-			end
-		end
-	end
 end
 
 function GameRules:OnUpdate(DeltaTime)
 	CoopPreloadWeapons()
 	COOP_AIPlayers = CoopPlayers() -- for CoopAIPlayer; every frame, players respawn as new entities
 	CoopMonitor("S")
-	CoopUpdateMelee()
+	CoopUpdateKeys()
 	if COOP_God == 1 then -- coop_god: refill every frame
 		for i, P in CoopPlayers() do
 			if P.cnt.health > 0 then P.cnt.health = P.cnt.max_health; end
@@ -141,6 +160,7 @@ function GameRules:OnUpdate(DeltaTime)
 	if _time < COOP_NextWake and COOP_NextWake - _time <= 1 then return end
 	COOP_NextWake = _time + 1
 	CoopWrapBehaviours()
+	CoopWrapHud()
 	if COOP_PendingLoad then CoopApplyLoad(); end
 	local players = {}
 	for i, P in CoopPlayers() do
@@ -148,10 +168,12 @@ function GameRules:OnUpdate(DeltaTime)
 		players[i] = {x = t.x, y = t.y, z = t.z}
 	end
 	if getn(players) == 0 then return end
-	local r2 = COOP_WAKE_RADIUS * COOP_WAKE_RADIUS
+	local wake2, sleeper2 = COOP_WAKE_RADIUS * COOP_WAKE_RADIUS, COOP_SLEEPER_RADIUS * COOP_SLEEPER_RADIUS
 	for i, e in System:GetEntities() do
+		if e.ai and not e.COOP_AnimWrapped then CoopWrapAnim(e) end
 		if e.Behaviour and e.cnt and e.Properties and e.Properties.species and not e.COOP_Awake
-			and e.Properties.bSleepOnSpawn ~= 1 and e.Enemy_Hidden ~= 1 then
+			and e.Enemy_Hidden ~= 1 then
+			local r2 = (e.Properties.bSleepOnSpawn == 1) and sleeper2 or wake2
 			local t = e:GetPos()
 			for j = 1, getn(players) do
 				local q = players[j]
@@ -178,10 +200,53 @@ function CoopWakeError(msg)
 	end
 end
 
+-- Mission objectives and messages: mission scripts run on the server and call its Hud, which
+-- nobody sees. Forward every call to the clients ("MHUD <op> <text>", COOP ClientStuff;
+-- "HUD" is taken by the pickup icons), and send
+-- the current objectives to a client that asks ("HUDSYNC": it joined after they were given).
+-- The flag lives in Hud itself, so a reloaded Hud gets wrapped again.
+-- ponytail: Hud.DisplayControl (hide radar/ammo) is not forwarded, add when a mission needs it
+function CoopWrapHud()
+	if (not Hud or Hud.COOP_Wrapped) then return; end
+	Hud.COOP_Wrapped = 1;
+	local wrap = function(name, op)
+		local old = Hud[name];
+		Hud[name] = function(self, a, b, c, d)
+			local r = %old(self, a, b, c, d);
+			local text = (%op == "push") and b or a; -- PushObjective(pos, text)
+			Server:BroadcastCommand("MHUD "..%op.." "..tostring(text or ""));
+			return r;
+		end
+	end
+	wrap("AddMessage", "msg");
+	wrap("PushObjective", "push");
+	wrap("CompleteObjective", "done");
+	wrap("FlashObjectives", "flash");
+	local oldRadar = Hud.SetRadarObjective;
+	Hud.SetRadarObjective = function(self, name)
+		Hud.COOP_Radar = name;
+		%oldRadar(self, name);
+		Server:BroadcastCommand("MHUD radar "..tostring(name));
+	end
+end
+CoopWrapHud();
+
+function CoopHudSync(server_slot)
+	server_slot:SendCommand("MHUD flash ");
+	for i, o in (Hud and Hud.objectives or {}) do
+		if (type(o) == "table") then
+			server_slot:SendCommand("MHUD push "..tostring(o.text));
+			if (o.completed) then server_slot:SendCommand("MHUD done "..tostring(o.text)); end
+		end
+	end
+	if (Hud and Hud.COOP_Radar) then server_slot:SendCommand("MHUD radar "..Hud.COOP_Radar); end
+end
+
 -- Client-side hits (see COOP ClientStuff): apply the damage a client reports for its own shot.
 function GameRules:OnClientCmd(server_slot, cmd)
 	local tk = tokenize(cmd);
-	if (tk[1] == "CHIT") then CoopClientHit(server_slot, tk); end
+	if (tk[1] == "CHIT") then CoopClientHit(server_slot, tk);
+	elseif (tk[1] == "HUDSYNC") then CoopHudSync(server_slot); end
 end
 
 function CoopClientHit(server_slot, tk)
@@ -211,6 +276,9 @@ if (not COOP_OldOnDamage) then COOP_OldOnDamage = GameRules.OnDamage; end -- onc
 function GameRules:OnDamage(hit)
 	local s, t = hit.shooter, hit.target;
 	if (s and not s.ai and s ~= _localplayer and t and t.ai and not hit.COOP_ClientHit) then return end
+	if (t and t.ai and not t.COOP_Awake and t.Enemy_Hidden ~= 1) then
+		call(CoopWake, {t}, "x", CoopWakeError); -- a sleeper that gets shot wakes up (COOP_SLEEPER_RADIUS)
+	end
 	return COOP_OldOnDamage(self, hit);
 end
 

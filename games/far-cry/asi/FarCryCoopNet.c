@@ -35,6 +35,7 @@ API(HANDLE) CreateFileA(const char *, DWORD, DWORD, void *, DWORD, DWORD, HANDLE
 API(BOOL) WriteFile(HANDLE, const void *, DWORD, DWORD *, void *);
 API(DWORD) GetTickCount(void);
 API(BOOL) DisableThreadLibraryCalls(HANDLE);
+API(int) lstrcmpiA(const char *, const char *);
 API(int) wvsprintfA(char *, const char *, va_list);
 
 int _fltused = 1;
@@ -354,6 +355,44 @@ static void __fastcall hSoundKey(void *self, void *edx, void *a, DWORD b, DWORD 
 	oSoundKey(self, edx, a, b, c, key, anim);
 }
 
+// FIX 7: areas for remote players. CPlayer::Update runs m_XAreaMgr.UpdatePlayer only for the
+// machine's own player (XPlayer.cpp "areas are only used for the local player"), so on the
+// dedicated server no AreaTrigger ever fires and missions stall (e.g. the sleeping village
+// on Training). The `je` at 0x330ae17e skips that block when bMyPlayer ([ebp-0x0e]) is 0;
+// it now jumps here. Own player: the original block. Others on the server: only the area
+// update (not UpdateAutoCenter/UpdateCamera), skipping AI (m_bIsAI +0x3bc). Each player has
+// its own CXAreaUser (+0x674, m_pEntity at +0x690), so enter/leave is tracked per player.
+// Server process only: on a client, other players must not switch its music or EAX areas.
+static int g_server;
+static BYTE *g_areaBlock, *g_areaSkip; // 0x330ae184 (own player's block), 0x330ae218 (after it)
+static void(__fastcall *areaUpdatePlayer)(void *, void *, void *); // CXAreaMgr::UpdatePlayer 0x330d3ee8
+static void __cdecl remoteAreas(BYTE *player)
+{
+	static int logged;
+	if (!g_server || player[0x3bc]) // m_bIsAI
+		return;
+	*(void **)(player + 0x690) = *(void **)(player + 4); // m_AreaUser.SetEntity(m_pEntity)
+	areaUpdatePlayer(*(BYTE **)(player + 0x268) + 0x3ac, 0, player + 0x674); // m_pGame->m_XAreaMgr
+	if (!logged++)
+		logf("areas: first update for remote player %x", (DWORD)player);
+}
+
+static __declspec(naked) void hArea(void)
+{
+	__asm {
+		cmp byte ptr [ebp - 0x0e], 0 // bMyPlayer
+		jne mine
+		pushad
+		push ebx                     // this (CPlayer)
+		call remoteAreas
+		add esp, 4
+		popad
+		jmp dword ptr [g_areaSkip]
+	mine:
+		jmp dword ptr [g_areaBlock]
+	}
+}
+
 static DWORD g_warns;
 static void __cdecl logWarn(const char *fmt, va_list va)
 { // log only the raw format: wvsprintfA has no %f, so formatting float arguments could
@@ -447,6 +486,14 @@ static DWORD __stdcall worker(void *unused)
 	hook(CG(0x33080227), 5, ts, hTs, (void **)&oTs, "CXClient::OnServerMsgTimeStamp");
 	hook(CG(0x330816ef), 6, ue, hUe, (void **)&oUe, "CXClient::OnServerMsgUpdateEntity");
 	hook(CG(0x3307019e), 8, gw, hWarn, &oWarn, "GameWarning");
+	if (g_server) {
+		static const BYTE je[] = {0x0f, 0x84, 0x94, 0x00, 0x00, 0x00}; // je +0x94 (skip area block)
+		void *unused; // the trampoline of a relative jump is never called
+		g_areaBlock = CG(0x330ae184);
+		g_areaSkip = CG(0x330ae218);
+		areaUpdatePlayer = (void(__fastcall *)(void *, void *, void *))CG(0x330d3ee8);
+		hook(CG(0x330ae17e), 6, je, hArea, &unused, "CPlayer::Update area check");
+	}
 	return 0;
 }
 
@@ -466,6 +513,7 @@ BOOL __stdcall DllMain(HANDLE self, DWORD reason, void *reserved)
 	for (p = name; *p; p++)
 		if (*p == '.')
 			*p = 0;
+	g_server = !lstrcmpiA(name, "FarCry_WinSV");
 	n = (int)GetModuleFileNameA(self, path, 260);
 	while (n > 0 && cut < 2) // strip "\FarCryCoopNet.asi" and "\Bin32"
 		if (path[--n] == '\\')
