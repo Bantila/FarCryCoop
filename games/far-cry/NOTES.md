@@ -164,9 +164,15 @@ Rejected: a CryGame.dll rebuilt from the 1.4 SDK. It needs VC 7.1 (Visual C++ To
 
 Monitor: `moved <id> <name> <class>` for loose objects within 15 m of a player whose position changed.
 
+Fix 10 (ASI): an entity of class `RigidBody`, `DestroyableObject` or `BasicEntity` (the barrels and crates of Pier) gets net presence once it moves on the server; `GetClassId` is at `+0xe8` of the `IEntity` vtable (`cmp ax, class id` right after it at `0x33071930`). No client packet failures with it, and respawn works (the owner can crouch and fire after dying). With `Gunship` in the list the gunship did reach the client, but flew in jerks; the owner chose to leave it out.
+
+Known limitations (owner's decision, 2026-10-20):
+- Helicopters (`Gunship`, `CargoChopper`) are not synced: a client sees them hang at their spawn point while they fly and fight on the server. Helicopters are for the host only, in the planned mode where the host plays the normal single-player game and friends join it.
+- Physics props: a remote player's body does not push barrels or crates on the server (nothing moved there when the client pushed them), so they stay put for everyone. Props pushed by explosions on the server are synced.
+
 ## Next steps
 
-1. Gunship and props: net presence for entity classes every client has (`Gunship`, `CargoChopper`, rigid bodies), not for whatever moves. Then check pushed barrels on the server.
+1. Host-plays-single-player mode: the host runs the normal campaign (everything, helicopters included, works for him as in single player), friends join it.
 2. Verify checkpoints in game (Pier `saveTrigger56`, Training `saveTrigger3`).
 3. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks), enemies jerking on the client (the client moves them more often than the server does: extrapolation between updates); then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
 4. Real engine saves (option A of the saves recon), after the lightweight `coop_save`.

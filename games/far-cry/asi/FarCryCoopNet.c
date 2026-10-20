@@ -58,6 +58,7 @@ void *__cdecl memset(void *d, int c, unsigned n)
 
 static HANDLE g_log = (HANDLE)-1;
 static BYTE *g_base, *g_movie; // CryGame.dll, CryMovie.dll
+static int g_server;            // running in FarCry_WinSV.exe (set in DllMain)
 
 static void logf(const char *fmt, ...)
 {
@@ -138,6 +139,48 @@ static void savePos(void *ent) // IEntity::GetPos(bool bWorldOnly) at vtable +0x
 // (m_nPriority * time since last send) so the important entities go first and the rest rotate.
 // std::list node (VS 2003): +0 next, +4 prev, +8 CNetEntityInfo
 // (+0x10 m_fLastUpdate, +0x24 m_nPriority from the previous Update).
+// FIX 10: level entities spawn with netPresence false (XSystemBase.cpp: ed.netPresence = false);
+// only players, AI and vehicle-class entities get it, so the server never sends anything else:
+// a Gunship flying on the server stays at its start on the clients, pushed barrels never roll
+// there. Give net presence to an entity of a class every client has once it moves on the
+// server (props pushed by explosions; a remote player's body does not push them there). Never to anything a client may lack: an update for an entity the client did not
+// spawn makes CXClient::OnServerMsgUpdateEntity return false and drop the rest of the packet,
+// the own player's update included (Birds/Fish/Bugs are ENTITY_DETAIL_ID entities a client can
+// suppress, and they move). IEntity vtable: +0x04 GetPos, +0xc4 GetId, +0xd0 GetNetPresence,
+// +0xd4 SetNetPresence (SetNetPresence(true) after SetContainer in the vehicle spawn code,
+// 0x33071498), +0xe8 GetClassId (WORD, compared with the class ids at 0x33071930).
+static int syncedClass(WORD c)
+{ // ClassRegistry.lua: RigidBody, DestroyableObject, BasicEntity. Not CargoChopper (101) and
+  // Gunship (102): synced, the gunship flew in jerks on the client; the owner prefers it left
+  // hanging where it spawned (helicopters are a host-only feature, see NOTES)
+	return c == 131 || c == 133 || c == 146;
+}
+static float g_firstPos[65536][3];
+static BYTE g_posSeen[65536];
+static void netPresenceIfMoved(void *ent)
+{
+	WORD id;
+	Vec3 *p;
+	float *q, dx, dy, dz;
+	if (((BYTE(__fastcall *)(void *, void *))VFN(ent, 0xd0))(ent, 0)) // already sent
+		return;
+	if (!syncedClass(((WORD(__fastcall *)(void *, void *))VFN(ent, 0xe8))(ent, 0)))
+		return;
+	id = ((WORD(__fastcall *)(void *, void *))VFN(ent, 0xc4))(ent, 0);
+	p = ((Vec3 * (__fastcall *)(void *, void *, int))VFN(ent, 0x04))(ent, 0, 1);
+	q = g_firstPos[id];
+	if (!g_posSeen[id]) {
+		g_posSeen[id] = 1;
+		q[0] = p->x, q[1] = p->y, q[2] = p->z;
+		return;
+	}
+	dx = p->x - q[0], dy = p->y - q[1], dz = p->z - q[2];
+	if (dx * dx + dy * dy + dz * dz < 0.01f)
+		return;
+	((void(__fastcall *)(void *, void *, int))VFN(ent, 0xd4))(ent, 0, 1);
+	logf("net presence on for moved entity %u", id);
+}
+
 #define MAX_NET 4096
 static BYTE *v[MAX_NET];    // list nodes in send order
 static float k[MAX_NET], lu[MAX_NET]; // sort key, m_fLastUpdate before the snapshot
@@ -152,6 +195,8 @@ static void sortNetEntities(BYTE *snap)
 	for (n = *(BYTE **)head; n != head; n = *(BYTE **)n) {
 		if (c == MAX_NET)
 			return; // ponytail: list too big, keep engine order and no budget
+		if (g_server && *(void **)(n + 0xc)) // CNetEntityInfo::m_pEntity
+			netPresenceIfMoved(*(void **)(n + 0xc));
 		dt = now - *(float *)(n + 0x10);
 		v[c] = n;
 		k[c++] = (float)*(int *)(n + 0x24) * (dt > 0 ? dt : 0);
@@ -364,7 +409,6 @@ static void __fastcall hSoundKey(void *self, void *edx, void *a, DWORD b, DWORD 
 // update (not UpdateAutoCenter/UpdateCamera), skipping AI (m_bIsAI +0x3bc). Each player has
 // its own CXAreaUser (+0x674, m_pEntity at +0x690), so enter/leave is tracked per player.
 // Server process only: on a client, other players must not switch its music or EAX areas.
-static int g_server;
 static BYTE *g_areaBlock, *g_areaSkip; // 0x330ae184 (own player's block), 0x330ae218 (after it)
 static void(__fastcall *areaUpdatePlayer)(void *, void *, void *); // CXAreaMgr::UpdatePlayer 0x330d3ee8
 static void __cdecl remoteAreas(BYTE *player)
