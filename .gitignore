@@ -1,2 +1,6 @@
 # Owner's private state (AGENTS.md) / Личные данные владельца (AGENTS.md)
 local/
+
+# Debugging tools stay local, only the mod is committed / Инструменты отладки остаются локально, в репозитории только мод
+games/*/tools/
+.playwright-mcp/
