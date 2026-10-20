@@ -130,9 +130,11 @@ Observed in game (Pier, Dam): the AI on the server works (mutants attack, damage
 
 Monitor (`Scripts/COOP/Monitor.lua`, `coop_monitor [0/1]`): once a second the server (`MON S`) and each client (`MON C`) log the same lines: players (position, health, armor, weapon, ammo, vehicle), AI within 60 m of a player (position, health, behaviour, target), vehicles and helicopters within 150 m (position, driver), and events (death, respawn, weapon change, vehicle enter/leave, map load, sequences). `tools/mon-diff.ps1` compares the last 10 s of both logs by entity id (the two game clocks differ) and lists entities that are frozen on the client, off by more than 5 m, missing, or differ in health, weapon, vehicle or driver.
 
+AI melee (2026-10-20): mutants ran up and stood still. The server deals AI melee damage only on the `KEYFRAME_APPLY_MELEE` animation event (`BasicPlayer.Server_EventHandler[ScriptEvent_AnimationKey]` sets `cnt.melee_attack`, then `CPlayer::UpdateMelee` raycasts and sends `ScriptEvent_MeleeAttack`), and a dedicated server never ticks character animations: no animation event arrives at all, even with `es_UpdateInvisibleCharacter 1`, `es_VisCheckForUpdate 0` or `entity:ForceCharacterUpdate(0)` every frame. The animations are loaded (`MELEE_ANIM_COUNT=3`, length 0.7 s). Fix in the COOP gamerules: every behaviour's `OnCloseContact` marks the entity, 0.35 s later the keyframe handler runs as if the animation hit (at most every 1.2 s, cancelled by a real keyframe), and the server sends `ANIM <id> attack_meleeN` so clients play the swing (AI animations are not replicated). Verified: mutants hit and kill, the owner sees the swing. Still missing for the same reason: AI jumps (`JUMP_TAKEOFF`/`JUMP_LAND` animation events in `CXPuppetProxy`) and any other animation-driven AI action.
+
 ## Next steps
 
-1. With the monitor: catch why enemies stand still on the client, the paraglider exit and the lag; then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
+1. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks), the paraglider exit, the lag; then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
 2. Fix checkpoints on the dedicated server: `GameEvent:OnTimer` reads `_localplayer`.
 3. Real engine saves (option A of the saves recon), after the lightweight `coop_save`.
 4. Occasional stutter: non-own entities get ~7 updates/s under the snapshot budget.

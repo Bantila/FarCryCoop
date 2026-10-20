@@ -47,6 +47,15 @@ ClientStuff.ServerCommandTable["NOCLIP"] = function(String, toktable)
 	if (_localplayer and CoopSetNoclip) then CoopSetNoclip(_localplayer, tonumber(toktable[2]) or 0); end
 end
 
+-- AI animation started by the server (melee swing, see COOP gamerules CoopUpdateMelee)
+ClientStuff.ServerCommandTable["ANIM"] = function(String, toktable)
+	local e = System:GetEntity(tonumber(toktable[2]) or 0);
+	if (e and toktable[3]) then
+		e:StartAnimation(0, toktable[3], 3, 0.1);
+		CoopMonEvent("C", "anim "..e:GetName().." "..toktable[3]);
+	end
+end
+
 -- sequences forwarded by the server (see COOP gamerules); names may contain spaces ("HIDE ALL").
 -- Cutscene-flagged sequences stay off like on the server (mov_NoCutscenes).
 setglobal("mov_NoCutscenes", 1);

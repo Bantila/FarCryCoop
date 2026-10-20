@@ -25,9 +25,68 @@ end
 COOP_WAKE_RADIUS = 150 -- ponytail: fixed radius, tune if far snipers or patrols stay frozen
 COOP_NextWake = 0
 
+-- AI melee without animations. The server deals AI melee damage on the KEYFRAME_APPLY_MELEE
+-- animation event, but a dedicated server never ticks character animations (nothing is rendered),
+-- so mutants run up and stand there. Every behaviour's OnCloseContact (it starts the melee
+-- animation, every frame while in contact) marks the entity; COOP_MELEE_DELAY later the
+-- keyframe handler runs as if the animation had reached the hit, at most every COOP_MELEE_PERIOD.
+-- A real keyframe (listen-server host watching) cancels the pending fake one.
+-- ponytail: fixed timing for every AI, read it from the melee animation length if it feels off
+COOP_MELEE_DELAY = 0.35
+COOP_MELEE_PERIOD = 1.2
+COOP_MeleeContact = {}
+COOP_MeleeDue = {}
+function CoopWrapMelee()
+	for name, b in AIBehaviour do
+		if (type(b) == "table" and b.OnCloseContact and not b.COOP_Melee) then
+			b.COOP_Melee = 1;
+			local old = b.OnCloseContact;
+			b.OnCloseContact = function(self, entity, sender)
+				COOP_MeleeContact[entity.id] = 1;
+				return %old(self, entity, sender);
+			end
+		end
+	end
+end
+if (not COOP_OrigAnimKey) then
+	COOP_OrigAnimKey = BasicPlayer.Server_EventHandler[ScriptEvent_AnimationKey];
+end
+BasicPlayer.Server_EventHandler[ScriptEvent_AnimationKey] = function(self, Params)
+	if (not COOP_FakeKey and type(Params) == "table" and Params.number == KEYFRAME_APPLY_MELEE) then
+		COOP_MeleeDue[self.id] = nil; -- the real animation got there
+	end
+	return COOP_OrigAnimKey(self, Params);
+end
+function CoopUpdateMelee()
+	for id, v in COOP_MeleeContact do
+		local e = System:GetEntity(id);
+		if (e and not COOP_MeleeDue[id] and _time >= (e.COOP_MeleeNext or 0)) then
+			COOP_MeleeDue[id] = _time + COOP_MELEE_DELAY;
+			e.COOP_MeleeNext = _time + COOP_MELEE_PERIOD;
+			-- AI animations are not sent over the network: tell the clients to play the swing
+			if ((e.MELEE_ANIM_COUNT or 0) > 0) then
+				Server:BroadcastCommand(format("ANIM %d attack_melee%d", id, random(1, e.MELEE_ANIM_COUNT)));
+			end
+		end
+	end
+	COOP_MeleeContact = {};
+	for id, t in COOP_MeleeDue do
+		if (_time >= t or t - _time > COOP_MELEE_DELAY) then -- second test: _time restarted on map load
+			COOP_MeleeDue[id] = nil;
+			local e = System:GetEntity(id);
+			if (e and e.cnt and e.cnt.health > 0) then
+				COOP_FakeKey = 1;
+				BasicPlayer.Server_EventHandler[ScriptEvent_AnimationKey](e, {number = KEYFRAME_APPLY_MELEE});
+				COOP_FakeKey = nil;
+			end
+		end
+	end
+end
+
 function GameRules:OnUpdate(DeltaTime)
 	CoopPreloadWeapons()
 	CoopMonitor("S")
+	CoopUpdateMelee()
 	if COOP_God == 1 then -- coop_god: refill every frame
 		for i, P in CoopPlayers() do
 			if P.cnt.health > 0 then P.cnt.health = P.cnt.max_health; end
@@ -36,6 +95,7 @@ function GameRules:OnUpdate(DeltaTime)
 	-- _time restarts with every map load, but Lua globals survive coop_restart
 	if _time < COOP_NextWake and COOP_NextWake - _time <= 1 then return end
 	COOP_NextWake = _time + 1
+	CoopWrapMelee() -- behaviours can load later, so look for new ones once a second
 	if COOP_PendingLoad then CoopApplyLoad(); end
 	local players = {}
 	for i, P in CoopPlayers() do
