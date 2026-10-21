@@ -168,7 +168,7 @@ Fix 10 (ASI): an entity of class `RigidBody`, `DestroyableObject` or `BasicEntit
 
 Known limitations (owner's decision, 2026-10-20):
 - Helicopters (`Gunship`, `CargoChopper`) are not synced: a client sees them hang at their spawn point while they fly and fight on the server. Helicopters are for the host only, in the planned mode where the host plays the normal single-player game and friends join it.
-- Physics props: a remote player's body does not push barrels or crates on the server (nothing moved there when the client pushed them), so they stay put for everyone. Props pushed by explosions on the server are synced.
+- Physics props (owner, 2026-10-21: the host cannot push them either): a remote player's body does not push barrels or crates on the server (nothing moved there when the client pushed them), so they stay put for everyone. Props pushed by explosions on the server are synced.
 
 ## Spike 9 — host mode and the Russian keyboard layout (2026-10-21)
 
@@ -217,10 +217,11 @@ Crysis co-op ([SeniorStackOverflow/crysis-coop](https://github.com/SeniorStackOv
 
 ## Next steps
 
-1. Host mode: make the `coop_map` console command work in the game client; check the intro cutscene for the host; try other campaign maps.
+1. Host mode: check the intro cutscene for the host; try other campaign maps.
 2. Verify checkpoints in game (Pier `saveTrigger56`, Training `saveTrigger3`).
-3. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks), enemies jerking on the client (the client moves them more often than the server does: extrapolation between updates); then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
-4. Real engine saves (option A of the saves recon), after the lightweight `coop_save`.
+3. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks); then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
+4. Real campaign saves (owner's priority, 2026-10-21): the host saves and loads; friends reconnect. Option A of the saves recon.
+4a. Cutscenes and helicopters for joined players (owner's priority). Enemies on the client move fine (owner); the short console commands are dropped.
 5. Joining without Steam or a VPN: join code, UDP hole punching and a relay (crysis-coop idea above).
 6. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).
 7. After the optimizations: host admin panel (in-game, no console), mission select by any player, friendly fire, `coop_dmg`, RocketMod: see [PLAN-fun-mode.md](PLAN-fun-mode.md).

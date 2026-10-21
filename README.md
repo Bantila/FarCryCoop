@@ -34,7 +34,7 @@ Far Cry has no official co-op. The campaign already runs as a local server plus 
 | Map change and restart | works | friends stay connected |
 | Mission objectives and messages | works | forwarded from the server to every player |
 | Leaving vehicles and the paraglider | works | the server tells the client to let go |
-| Barrels and crates moved on the server | works | moved by explosions; a player cannot push them |
+| Barrels and crates moved on the server | works | moved by explosions; no player can push them, the host included |
 | Russian keyboard layout | works | the game used to lose its key bindings with it |
 | Checkpoints and respawn | partly | the respawn point follows checkpoints; not seen in game on every map |
 | Shirt color | works | 10 colors from the launcher; other players use the multiplayer Jack model, which has the color mask |
@@ -122,12 +122,11 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 
 - Helicopters (`Gunship`, `CargoChopper`) fly only for the host; joined players see them hanging at their start point.
 - To the other players a paraglider that climbs looks as if it falls.
-- A joined player cannot push barrels or crates.
+- No player can push barrels or crates, the host included.
 - Joined players do not see cutscenes; the host's intro cutscene is not verified on every map.
 - No real saves: a server restart starts the map over.
-- AI jumps and other animation-driven AI actions do not happen on a dedicated server; enemies may move in small jerks for joined players.
+- AI jumps and other animation-driven AI actions do not happen on a dedicated server.
 - In-game chat and console type Latin letters only.
-- The short console commands (`coop_map pier`) do nothing in the game client; use the `#...` forms.
 - PunkBuster stays off; the mod never touches it.
 
 ## Roadmap
@@ -135,8 +134,8 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 1. Verify checkpoints, shirt color, loadout and the lobby "Start" in game with two players.
 2. Steam join with a friend's real second account.
 3. Host admin panel inside the game (ESC menu instead of the console), any player able to start a mission, friendly fire switch: [games/far-cry/PLAN-fun-mode.md](games/far-cry/PLAN-fun-mode.md).
-4. Smoother enemies for joined players; AI jumps on a dedicated server.
-5. Real engine saves on a listen-server host.
+4. Cutscenes and helicopters for joined players.
+5. Real campaign saves: the host saves and loads, friends come back with them.
 6. Player list during the game in the launcher.
 
 ## Building from source

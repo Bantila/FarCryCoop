@@ -65,10 +65,8 @@ If something does not work, send `log.txt` from the Far Cry folder, the `netlog_
 ## Known limitations
 - Cutscenes are off for joined players.
 - Helicopters fly only for the host; joined players see them hanging in place.
-- Barrels and crates: a joined player cannot push them.
+- Barrels and crates: players cannot push them (the host neither); explosions move them.
 - In-game chat and console type Latin letters only (the game works with any keyboard layout).
-- The short console commands (`coop_map pier` and the like) do not work in the game client yet: use the `#...` forms above.
-- Enemies may move in small jerks for joined players.
 
 Source and bug reports: https://github.com/Bantila/FarCryCoop
 Ultimate ASI Loader: https://github.com/ThirteenAG/Ultimate-ASI-Loader (MIT, see `Bin32\UltimateASILoader-LICENSE.txt`).
