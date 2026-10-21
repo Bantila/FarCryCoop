@@ -120,8 +120,9 @@ fn start_game(me: &Value, loadout: bool, line: Option<String>) -> Result<(), Str
             let _ = std::fs::remove_file(moddir.join("join.txt")); // an old line must not run
         }
     }
+    // one bridge per PC: a second one cannot bind UDP 49011 and just stays open
     let steam = moddir.join("Steam");
-    if steam.join("FarCryCoopSteam.exe").exists() {
+    if steam.join("FarCryCoopSteam.exe").exists() && !running("FarCryCoopSteam.exe") {
         Command::new(steam.join("FarCryCoopSteam.exe")).current_dir(&steam).spawn().map_err(|e| e.to_string())?;
     }
     Command::new(bin.join("FarCry.exe"))
@@ -130,6 +131,16 @@ fn start_game(me: &Value, loadout: bool, line: Option<String>) -> Result<(), Str
         .spawn()
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn running(exe: &str) -> bool {
+    use std::os::windows::process::CommandExt;
+    Command::new("tasklist")
+        .args(["/NH", "/FI", &format!("IMAGENAME eq {}", exe)])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains(exe))
+        .unwrap_or(false)
 }
 
 // wait for a Steam invite: the bridge writes join.txt when the player accepts it
