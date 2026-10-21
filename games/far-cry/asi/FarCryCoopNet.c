@@ -33,6 +33,10 @@ API(HANDLE) CreateThread(void *, DWORD, DWORD(__stdcall *)(void *), void *, DWOR
 API(void) Sleep(DWORD);
 API(HANDLE) CreateFileA(const char *, DWORD, DWORD, void *, DWORD, DWORD, HANDLE);
 API(BOOL) WriteFile(HANDLE, const void *, DWORD, DWORD *, void *);
+API(BOOL) ReadFile(HANDLE, void *, DWORD, DWORD *, void *);
+API(BOOL) CloseHandle(HANDLE);
+API(BOOL) DeleteFileA(const char *);
+API(void *) AddVectoredExceptionHandler(DWORD, long(__stdcall *)(void **));
 API(DWORD) GetTickCount(void);
 API(BOOL) DisableThreadLibraryCalls(HANDLE);
 API(int) lstrcmpiA(const char *, const char *);
@@ -43,12 +47,20 @@ API(HANDLE) GetKeyboardLayout(DWORD);
 
 int _fltused = 1;
 
-// No CRT: the optimizer may still emit calls to memset for byte loops.
+// No CRT: the optimizer may still emit calls to memset/memcpy for byte loops.
 void *__cdecl memset(void *d, int c, unsigned n)
 {
 	BYTE *p = (BYTE *)d;
 	while (n--)
 		*p++ = (BYTE)c;
+	return d;
+}
+void *__cdecl memcpy(void *d, const void *s, unsigned n)
+{
+	BYTE *p = (BYTE *)d;
+	const BYTE *q = (const BYTE *)s;
+	while (n--)
+		*p++ = *q++;
 	return d;
 }
 
@@ -159,10 +171,10 @@ static void savePos(void *ent) // IEntity::GetPos(bool bWorldOnly) at vtable +0x
 // +0xd4 SetNetPresence (SetNetPresence(true) after SetContainer in the vehicle spawn code,
 // 0x33071498), +0xe8 GetClassId (WORD, compared with the class ids at 0x33071930).
 static int syncedClass(WORD c)
-{ // ClassRegistry.lua: RigidBody, DestroyableObject, BasicEntity. Not CargoChopper (101) and
+{ // ClassRegistry.lua: Paraglider, RigidBody, DestroyableObject, BasicEntity. Not CargoChopper (101) and
   // Gunship (102): synced, the gunship flew in jerks on the client; the owner prefers it left
   // hanging where it spawned (helicopters are a host-only feature, see NOTES)
-	return c == 131 || c == 133 || c == 146;
+	return c == 95 || c == 131 || c == 133 || c == 146; // + Paraglider: frozen on clients of a listen host
 }
 static float g_firstPos[65536][3];
 static BYTE g_posSeen[65536];
@@ -543,6 +555,73 @@ static void keyboardUS(void)
 	logf("keyboard: the game uses the US layout");
 }
 
+// Steam join (FarCryCoopSteam.exe): when the player clicks Join in the Steam friends list, the
+// bridge writes the console line to run into Mods\FarCryCoop\join.txt. It runs on the main
+// thread: IGame::Update (CXGame vtable 0x330fd9a0 +0x04 = 0x330c08e6, called every frame, menu
+// included) is wrapped and polls the file twice a second, after the frame. Console:
+// ISystem::GetIConsole +0x60, IConsole::ExecuteString +0x80 (CXConsole vtable 0x36571c58;
+// +0x84 is Exit, which shows "No comments from application" and quits the game).
+static char g_join[600]; // Mods\FarCryCoop\join.txt
+static BYTE(__fastcall *oGameUpdate)(void *, void *);
+static DWORD g_joinTick;
+static BYTE __fastcall hGameUpdate(void *game, void *edx)
+{
+	BYTE r = oGameUpdate(game, edx); // after the frame, as the console runs typed lines
+	if (GetTickCount() - g_joinTick > 500 && !hosting()) { // a host leaves it to the other window (bridge -loop)
+		HANDLE f;
+		g_joinTick = GetTickCount();
+		f = CreateFileA(g_join, 0x80000000, 0, 0, 3, 0x80, 0); // GENERIC_READ, OPEN_EXISTING
+		if (f != (HANDLE)-1) {
+			char cmd[512];
+			DWORD n = 0;
+			void *sys = getISystem(), *con;
+			ReadFile(f, cmd, sizeof cmd - 1, &n, 0);
+			CloseHandle(f);
+			DeleteFileA(g_join);
+			while (n && (cmd[n - 1] == '\r' || cmd[n - 1] == '\n'))
+				n--;
+			cmd[n] = 0;
+			con = sys ? ((void *(__fastcall *)(void *, void *))VFN(sys, 0x60))(sys, 0) : 0;
+			logf("steam: %s", cmd);
+			if (con && n)
+				((void(__fastcall *)(void *, void *, const char *, int, int))VFN(con, 0x80))(con, 0, cmd, 0, 1);
+			logf("steam: done");
+		}
+	}
+	return r;
+}
+
+// Crashes leave only a broken stack in log.txt: log where access violations happen (first ones).
+static int g_faults;
+static long __stdcall onFault(void **info) // EXCEPTION_POINTERS
+{
+	DWORD *rec = (DWORD *)info[0], *ctx = (DWORD *)info[1];
+	if (rec[0] == 0xc0000005 && g_faults++ < 5) // access violations only (C++ throws are normal); CONTEXT.Esp at +0xc4
+		logf("exception %x at %x (%u %x) esp %x [%x %x %x %x]", rec[0], rec[3], rec[5], rec[6], ctx[0xc4 / 4],
+			((DWORD *)ctx[0xc4 / 4])[0], ((DWORD *)ctx[0xc4 / 4])[1], ((DWORD *)ctx[0xc4 / 4])[2], ((DWORD *)ctx[0xc4 / 4])[3]);
+	return 0; // EXCEPTION_CONTINUE_SEARCH
+}
+static void steamJoin(void)
+{
+	void *sys = getISystem(), *game = 0, **slot;
+	DWORD old;
+	int i;
+	for (i = 0; i < 1200 && !(game = sys ? ((void *(__fastcall *)(void *, void *))VFN(sys, 0x4c))(sys, 0) : 0); i++) { // GetIGame
+		Sleep(100);
+		sys = getISystem();
+	}
+	if (!game) {
+		logf("steam: no IGame in 120 s, Steam join off");
+		return;
+	}
+	slot = &(*(void ***)game)[1]; // IGame::Update
+	oGameUpdate = (BYTE(__fastcall *)(void *, void *))*slot;
+	VirtualProtect(slot, 4, 0x04, &old); // PAGE_READWRITE
+	*slot = (void *)hGameUpdate;
+	VirtualProtect(slot, 4, old, &old);
+	logf("steam: polling %s", g_join);
+}
+
 static DWORD __stdcall worker(void *unused)
 {
 	static const BYTE eh[] = {0xb8, 0xff, 0xff, 0xff, 0xff};                // mov eax, imm32 (EH prolog)
@@ -591,6 +670,9 @@ static DWORD __stdcall worker(void *unused)
 		areaUpdatePlayer = (void(__fastcall *)(void *, void *, void *))CG(0x330d3ee8);
 		hook(CG(0x330ae17e), 6, je, hArea, &unused, "CPlayer::Update area check");
 	}
+	AddVectoredExceptionHandler(1, onFault);
+	if (!g_server)
+		steamJoin();
 	return 0;
 }
 
@@ -623,6 +705,9 @@ BOOL __stdcall DllMain(HANDLE self, DWORD reason, void *reserved)
 			cut++;
 	args[0] = name;
 	args[1] = (void *)GetCurrentProcessId();
+	for (cut = 0; cut < n; cut++) // path still ends at <game>
+		g_join[cut] = path[cut];
+	wvsprintfA(g_join + n, "\\Mods\\FarCryCoop\\join.txt", 0);
 	wvsprintfA(path + n, "\\Mods\\FarCryCoop\\netlog_%s_%u.txt", (va_list)args);
 	g_log = CreateFileA(path, 0x40000000, 1, 0, 2, 0x80, 0); // GENERIC_WRITE, FILE_SHARE_READ, CREATE_ALWAYS
 	logf("FarCryCoopNet loaded in %s", name);
