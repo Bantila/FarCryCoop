@@ -180,24 +180,6 @@ function CoopParagliders()
 	end
 end
 
--- Level scripts move the player after a cutscene (Cooler, Factory, Swamp, Volcano: to the
--- CutsceneJack entity; Dam, Fort, Pier: to the camera) with _localplayer:SetPos, and on the
--- server _localplayer is the host only: the others stayed behind. Wrap SetPos on the host's
--- player entity (a new one after each respawn): a script jump of more than 20 m brings the
--- others along at the next tick. Our own CoopTeleport/CoopGather move everyone anyway.
-function CoopWrapHostSetPos()
-	local P = _localplayer;
-	if (not P or P.COOP_SetPosWrapped) then return; end
-	P.COOP_SetPosWrapped = 1;
-	local old = P.SetPos;
-	P.SetPos = function(self, pos)
-		local q = self:GetPos();
-		local d = (pos.x-q.x)*(pos.x-q.x) + (pos.y-q.y)*(pos.y-q.y) + (pos.z-q.z)*(pos.z-q.z);
-		%old(self, pos);
-		if (d > 400) then COOP_GatherToHost = 1; end
-	end
-end
-
 -- Checkpoints: GameEvent:OnTimer (Event_Save of a mission's save trigger) reads _localplayer, so
 -- on a dedicated server it failed and never set _LastCheckPPos: players respawned at the map
 -- start. Run it with the nearest living player as _localplayer; everyone respawns there.
@@ -466,12 +448,6 @@ function GameRules:OnUpdate(DeltaTime)
 	CoopWrapReleaseUser()
 	CoopSendVehOut()
 	call(CoopParagliders, {}, "x", function(msg) System:LogAlways("coop: paraglider error: "..tostring(msg)); end)
-	CoopWrapHostSetPos()
-	if COOP_GatherToHost then
-		COOP_GatherToHost = nil
-		CoopGather(_localplayer)
-		CoopMonEvent("S", "gather after a script moved the host")
-	end
 	CoopBoatSeats()
 	call(CoopApplyLoadouts, {}, "x", function(msg) System:LogAlways("coop: loadout error: "..tostring(msg)); end)
 	call(CoopApplyPrefs, {}, "x", function(msg) System:LogAlways("coop: prefs error: "..tostring(msg)); end)
@@ -668,8 +644,7 @@ function CoopApplyLoad()
 	end
 	for i, P in list do
 		local s = save.players[i] or save.players[1];
-		P:SetPos(s.pos);
-		P:SetAngles(s.ang);
+		CoopMovePlayer(P, s.pos, s.ang);
 		P.cnt.health = s.health;
 		P.cnt.armor = s.armor;
 		for ammotype, n in s.ammo do P.Ammo[ammotype] = n; end

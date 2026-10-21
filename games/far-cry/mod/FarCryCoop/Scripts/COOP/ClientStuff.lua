@@ -141,6 +141,14 @@ ClientStuff.ServerCommandTable["PCOLOR"] = function(String, toktable)
 	CoopMonEvent("C", "color "..e:GetName().." "..toktable[3]);
 end
 
+-- the server moves our player (COOP CoopMovePlayer): our own game owns its position
+ClientStuff.ServerCommandTable["TELE"] = function(String, tk)
+	if (Game:IsServer() or not _localplayer) then return; end
+	_localplayer:SetPos({x = tonumber(tk[2]) or 0, y = tonumber(tk[3]) or 0, z = tonumber(tk[4]) or 0});
+	if (tk[7]) then _localplayer:SetAngles({x = tonumber(tk[5]) or 0, y = tonumber(tk[6]) or 0, z = tonumber(tk[7]) or 0}); end
+	CoopMonEvent("C", "tele "..strsub(String, 6));
+end
+
 -- an entity hidden or shown by a mission event on the server (COOP gamerules CoopWrapHide)
 ClientStuff.ServerCommandTable["HIDE"] = function(String, toktable)
 	local e = System:GetEntity(tonumber(toktable[2]) or 0);

@@ -107,13 +107,26 @@ function CoopPlayers()
 	return t;
 end
 
+-- A remote player's own game moves it (client-side movement): SetPos on the server did not
+-- move a client at all, so coop_gather / coop_goto / coop_load only ever moved the host.
+-- The client moves its own player ("TELE x y z [ax ay az]", COOP ClientStuff).
+function CoopMovePlayer(P, pos, ang)
+	P:SetPos(pos);
+	if (ang) then P:SetAngles(ang); end
+	for i, slot in Server:GetServerSlotMap() do
+		if (slot:GetPlayerId() == P.id) then
+			local a = ang and format(" %.2f %.2f %.2f", ang.x, ang.y, ang.z) or "";
+			slot:SendCommand(format("TELE %.2f %.2f %.2f", pos.x, pos.y, pos.z)..a);
+		end
+	end
+end
+
 -- move every player next to pos and make it the respawn point
 function CoopTeleport(pos, ang)
 	_LastCheckPPos = new(pos);
 	_LastCheckPAngles = new(ang);
 	for i, P in CoopPlayers() do
-		P:SetPos({x = pos.x + i, y = pos.y, z = pos.z}); -- 1 m apart so players do not stack
-		P:SetAngles(ang);
+		CoopMovePlayer(P, {x = pos.x + i, y = pos.y, z = pos.z}, ang); -- 1 m apart so players do not stack
 	end
 	System:LogAlways(format("coop: teleported to %.0f,%.0f,%.0f", pos.x, pos.y, pos.z));
 end
@@ -127,7 +140,7 @@ function CoopGather(leader)
 	for i, P in CoopPlayers() do
 		if (P ~= leader) then
 			k = k + 1;
-			P:SetPos({x = t.x + k, y = t.y, z = t.z}); -- 1 m apart so players do not stack
+			CoopMovePlayer(P, {x = t.x, y = t.y, z = t.z + 0.3}); -- on the leader's spot: 1 m aside put a client into a wall
 		end
 	end
 	System:LogAlways(format("coop: gathered %d players at %s", k, leader:GetName()));
