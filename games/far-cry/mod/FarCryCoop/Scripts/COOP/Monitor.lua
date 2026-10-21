@@ -107,6 +107,19 @@ function CoopMonitor(side)
 	end
 end
 
+-- The inflatable boat has a passenger seat (psngr_sit_pos01 in its model and passengersTT in
+-- inflatableboat.lua) that single player turned off with passengerLimit = 0: a second player
+-- could not get in. VehicleCommon reads passengerLimit whenever it is used, so switching it on
+-- per boat is enough; server (COOP gamerules) and clients (COOP ClientStuff) both do it once a
+-- second. Lives here because both sides load this file.
+function CoopBoatSeats()
+	for i, e in System:GetEntities() do
+		if (e.classname == "InflatableBoat" and e.passengerLimit == 0 and e.passengersTT and e.passengersTT[1]) then
+			e.passengerLimit = 1;
+		end
+	end
+end
+
 function CoopMonitorSet(on)
 	COOP_MonitorOn = tonumber(on) or (1 - COOP_MonitorOn);
 	System:LogAlways("coop_monitor "..COOP_MonitorOn);

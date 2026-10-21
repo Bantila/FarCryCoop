@@ -114,6 +114,10 @@ end
 -- water) must drop him on the clients too: the paraglider's client table has no OnUnBind, so the
 -- client kept gliding. Tell the clients ("VEHOUT <vehicle> <player>", COOP ClientStuff).
 -- VC loads with the first vehicle class, so this is checked once a second.
+-- Sent a second later and only if the player is really out of that vehicle: on a listen host
+-- the host's own client code (same Lua state) also calls ReleaseUser while getting in, and an
+-- immediate VEHOUT made the other clients pull the host off his paraglider.
+COOP_VehOut = {}
 function CoopWrapReleaseUser()
 	if (not VC or VC.COOP_Wrapped) then return; end
 	VC.COOP_Wrapped = 1;
@@ -121,9 +125,22 @@ function CoopWrapReleaseUser()
 	VC.ReleaseUser = function(self, aTable, a, b)
 		local p = aTable and aTable.entity;
 		local r = %old(self, aTable, a, b);
-		if (p and p.classname == "Player") then Server:BroadcastCommand("VEHOUT "..self.id.." "..p.id); end
+		if (p and p.classname == "Player") then COOP_VehOut[getn(COOP_VehOut) + 1] = {v = self.id, p = p.id}; end
 		return r;
 	end
+end
+function CoopSendVehOut()
+	for i = 1, getn(COOP_VehOut) do
+		local o = COOP_VehOut[i];
+		local p = System:GetEntity(o.p);
+		if (p and not (p.theVehicle and p.theVehicle.id == o.v)) then
+			Server:BroadcastCommand("VEHOUT "..o.v.." "..o.p);
+			-- the level has one paraglider: whoever lands with it brings the others along
+			local v = System:GetEntity(o.v);
+			if (v and v.classname == "Paraglider" and BasicPlayer.IsAlive(p)) then CoopGather(p); end
+		end
+	end
+	COOP_VehOut = {};
 end
 
 -- Checkpoints: GameEvent:OnTimer (Event_Save of a mission's save trigger) reads _localplayer, so
@@ -188,7 +205,193 @@ BasicPlayer.Server_EventHandler[ScriptEvent_AnimationKey] = function(self, Param
 	return COOP_OrigAnimKey(self, Params);
 end
 
+-- Teammate bots (#CoopBot()): a mercenary spawned with the players' species (0; mercs are 1),
+-- so it is a friend of the players and an enemy of the mercs. Once a second: shoot its
+-- attention target if that is an enemy, else run to the nearest player.
+-- ponytail: merc model and merc behaviours, leader by name (all players may be "Jack
+-- Carver"); give it its own character/model if it should look and act like a teammate
+COOP_Bots = {} -- this file runs on every map load; old ids would point at other entities
+COOP_BOT_CLASSES = {"Grunt", "MercCover", "MercRear", "MercScout"}
+COOP_BOT_FOLLOW = 5 -- metres: closer than this to its leader, it stays put
+function CoopBotPipes()
+	if (COOP_BotPipes) then return; end
+	COOP_BotPipes = 1;
+	AI:CreateGoalPipe("coop_follow");
+	AI:PushGoal("coop_follow", "firecmd", 0, 0);
+	AI:PushGoal("coop_follow", "run", 0, 1);
+	AI:PushGoal("coop_follow", "acqtarget", 0, ""); -- the leader named in SelectPipe
+	AI:PushGoal("coop_follow", "approach", 1, 4);
+	AI:PushGoal("coop_follow", "timeout", 1, 0.5);
+	AI:CreateGoalPipe("coop_fight");
+	AI:PushGoal("coop_fight", "firecmd", 0, 1);
+	AI:PushGoal("coop_fight", "timeout", 1, 1);
+end
+
+function CoopBot()
+	local leader = _localplayer or COOP_AIPlayers[1];
+	if (not leader) then System:LogAlways("coop_bot: no player to follow"); return; end
+	local class;
+	for i = 1, getn(COOP_BOT_CLASSES) do
+		local c = getglobal(COOP_BOT_CLASSES[i]);
+		if (type(c) == "table" and c.Properties and c.Properties.species) then class = COOP_BOT_CLASSES[i]; break; end
+	end
+	if (not class) then System:LogAlways("coop_bot: no mercenary class loaded on this map"); return; end
+	CoopBotPipes();
+	-- the spawned entity copies the class defaults: spawn it as the players' species
+	local props = getglobal(class).Properties;
+	local species = props.species;
+	props.species = 0;
+	local bot = Server:SpawnEntity(class);
+	props.species = species;
+	if (not bot) then System:LogAlways("coop_bot: could not spawn "..class); return; end
+	local p = leader:GetPos();
+	bot:SetPos({x = p.x + 2, y = p.y + 2, z = p.z + 1});
+	bot:EnableSave(0);
+	tinsert(COOP_Bots, bot.id);
+	CoopMonEvent("S", "bot "..bot:GetName().." ("..class..")");
+end
+Game:AddCommand("coop_bot", "CoopBot()", "coop_bot: spawn a teammate bot that follows the nearest player");
+
+function CoopUpdateBots()
+	local keep = {};
+	for i = 1, getn(COOP_Bots) do
+		local bot = System:GetEntity(COOP_Bots[i]);
+		if (bot and bot.cnt and bot.cnt.health > 0) then
+			tinsert(keep, bot.id);
+			local t = AI:GetAttentionTargetOf(bot.id);
+			if (type(t) == "table" and t.Properties and t.Properties.species and t.Properties.species ~= 0
+				and t.cnt and t.cnt.health and t.cnt.health > 0) then
+				bot:SelectPipe(0, "coop_fight");
+			else
+				local leader = CoopNearestPlayer(bot);
+				if (leader) then
+					local p, q = bot:GetPos(), leader:GetPos();
+					if ((p.x-q.x)*(p.x-q.x) + (p.y-q.y)*(p.y-q.y) > COOP_BOT_FOLLOW*COOP_BOT_FOLLOW) then
+						bot:SelectPipe(0, "coop_follow", leader:GetName());
+					end
+				end
+			end
+		end
+	end
+	COOP_Bots = keep;
+end
+
+-- Weapons carry over to the next level, as in the single-player story. At a mission end the
+-- server remembers every player's weapons and ammo per server slot (slots stay through
+-- LoadLevelMPServer); on the next level, once that slot's player is alive, the level's own
+-- starting weapons are replaced by them. Single player does this for its _localplayer only
+-- (SavePlayerElements/LoadPlayerElements), and in co-op the host got the level's defaults.
+-- Kept in globals: they survive the map load.
+function CoopSaveLoadouts()
+	COOP_Loadouts = {};
+	for i, slot in Server:GetServerSlotMap() do
+		local P = System:GetEntity(slot:GetPlayerId());
+		if (P and P.cnt and P.cnt.GetWeaponsSlots) then
+			local names = {};
+			for k, w in P.cnt:GetWeaponsSlots() do
+				if (type(w) == "table" and w.name) then names[getn(names) + 1] = w.name; end
+			end
+			local cur = P.cnt.weapon;
+			COOP_Loadouts[slot:GetId()] = {weapons = names, ammo = new(P.Ammo or {}),
+				current = (type(cur) == "table" and cur.name) or names[1]};
+		end
+	end
+end
+
+function CoopApplyLoadouts()
+	if (not COOP_Loadouts) then return; end
+	for i, slot in Server:GetServerSlotMap() do
+		local L, P = COOP_Loadouts[slot:GetId()], System:GetEntity(slot:GetPlayerId());
+		if (L and P and P.cnt and P.cnt.GetWeaponsSlots and BasicPlayer.IsAlive(P)) then
+			COOP_Loadouts[slot:GetId()] = nil;
+			local keep = {};
+			for k = 1, getn(L.weapons) do keep[L.weapons[k]] = 1; end
+			for k, w in P.cnt:GetWeaponsSlots() do -- drop the level's starting weapons we did not carry
+				if (type(w) == "table" and w.name and not keep[w.name] and WeaponClassesEx[w.name]) then
+					P.cnt:MakeWeaponAvailable(WeaponClassesEx[w.name].id, 0);
+				end
+			end
+			for k = 1, getn(L.weapons) do
+				local def = WeaponClassesEx[L.weapons[k]];
+				if (def) then Game:AddWeapon(L.weapons[k]); P.cnt:MakeWeaponAvailable(def.id, 1); end
+			end
+			for ammotype, n in L.ammo do P.Ammo[ammotype] = n; end
+			if (L.current and WeaponClassesEx[L.current]) then P.cnt:SetCurrWeapon(WeaponClassesEx[L.current].id); end
+			P.COOP_Carried = 1; -- CoopApplyPrefs: keep these, only refill the ammo
+			CoopMonEvent("S", "loadout "..P:GetName().." "..getn(L.weapons).." weapons");
+		end
+	end
+end
+
+-- Launcher settings (prefs.lua, loaded by COOP ClientStuff): every client sends its shirt color
+-- and chosen weapons ("PREF", OnClientCmd). Once per spawned player entity (a respawn is a new
+-- entity): everyone paints it ("PCOLOR", COOP ClientStuff). With the host's COOP_LoadoutMode=1
+-- it also gets the Machete plus its 4 weapons instead of the mission's, unless it carried
+-- weapons over from the last level (CoopApplyLoadouts), and full ammo every spawn.
+COOP_LOADOUT_WEAPONS = {Falcon=1, MP5=1, P90=1, M4=1, AG36=1, OICW=1, Shotgun=1, SniperRifle=1, M249=1, RL=1}
+if (not COOP_Prefs) then COOP_Prefs = {}; end -- per server slot id; kept through map loads
+
+function CoopSetPrefs(server_slot, tk)
+	local color = tonumber(tk[2]) or 1;
+	if (color < 0 or color > 9) then color = 1; end
+	local weapons = {};
+	for k = 3, 6 do
+		if (tk[k] and COOP_LOADOUT_WEAPONS[tk[k]]) then weapons[getn(weapons) + 1] = tk[k]; end
+	end
+	COOP_Prefs[server_slot:GetId()] = {color = color, weapons = weapons};
+	-- a player who just joined has not seen the others' colors
+	for i, slot in Server:GetServerSlotMap() do
+		local p, P = COOP_Prefs[slot:GetId()], System:GetEntity(slot:GetPlayerId());
+		if (p and P and P.COOP_Prefed) then server_slot:SendCommand("PCOLOR "..P.id.." "..p.color); end
+	end
+	CoopMonEvent("S", "prefs slot "..server_slot:GetId().." color "..color.." weapons "..getn(weapons));
+end
+
+function CoopFillAmmo(P)
+	for ammotype, amount in MaxAmmo do
+		if (P.Ammo and P.Ammo[ammotype] and P.Ammo[ammotype] < amount) then
+			BasicPlayer.AddAmmo(P, ammotype, amount - P.Ammo[ammotype]);
+		end
+	end
+end
+
+function CoopApplyPrefs()
+	for i, slot in Server:GetServerSlotMap() do
+		local p, P = COOP_Prefs[slot:GetId()], System:GetEntity(slot:GetPlayerId());
+		local waiting = COOP_Loadouts and COOP_Loadouts[slot:GetId()]; -- carried weapons not given yet
+		if (p and P and not P.COOP_Prefed and not waiting and P.cnt and BasicPlayer.IsAlive(P)) then
+			P.COOP_Prefed = 1;
+			Server:BroadcastCommand("PCOLOR "..P.id.." "..p.color);
+			if (COOP_LoadoutMode == 1) then
+				if (not P.COOP_Carried) then
+					for k, w in P.cnt:GetWeaponsSlots() do -- drop the mission's starting weapons
+						if (type(w) == "table" and w.name and WeaponClassesEx[w.name]) then
+							P.cnt:MakeWeaponAvailable(WeaponClassesEx[w.name].id, 0);
+						end
+					end
+					local give = {"Machete"};
+					for k = 1, getn(p.weapons) do give[k + 1] = p.weapons[k]; end
+					for k = 1, getn(give) do
+						Game:AddWeapon(give[k]);
+						P.cnt:MakeWeaponAvailable(WeaponClassesEx[give[k]].id, 1);
+					end
+					P.cnt:SetCurrWeapon(WeaponClassesEx[give[getn(give)]].id);
+				end
+				CoopFillAmmo(P);
+			end
+			CoopMonEvent("S", "prefs "..P:GetName().." color "..p.color.." carried "..tostring(P.COOP_Carried));
+		end
+	end
+end
+
 function GameRules:OnUpdate(DeltaTime)
+	if COOP_PendingMap then -- next level asked for by a mission end (CoopStartLevel)
+		local map = COOP_PendingMap
+		COOP_PendingMap = nil
+		call(CoopSaveLoadouts, {}, "x", function(msg) System:LogAlways("coop: loadout save error: "..tostring(msg)); end)
+		CoopMap(map)
+		return
+	end
 	CoopPreloadWeapons()
 	COOP_AIPlayers = CoopPlayers() -- for CoopAIPlayer; every frame, players respawn as new entities
 	CoopMonitor("S")
@@ -207,6 +410,11 @@ function GameRules:OnUpdate(DeltaTime)
 	CoopWrapBehaviours()
 	CoopWrapHud()
 	CoopWrapReleaseUser()
+	CoopSendVehOut()
+	CoopBoatSeats()
+	call(CoopApplyLoadouts, {}, "x", function(msg) System:LogAlways("coop: loadout error: "..tostring(msg)); end)
+	call(CoopApplyPrefs, {}, "x", function(msg) System:LogAlways("coop: prefs error: "..tostring(msg)); end)
+	call(CoopUpdateBots, {}, "x", function(msg) System:LogAlways("coop: bot error: "..tostring(msg)); end)
 	if COOP_PendingLoad then CoopApplyLoad(); end
 	local players = {}
 	for i, P in CoopPlayers() do
@@ -293,7 +501,8 @@ end
 function GameRules:OnClientCmd(server_slot, cmd)
 	local tk = tokenize(cmd);
 	if (tk[1] == "CHIT") then CoopClientHit(server_slot, tk);
-	elseif (tk[1] == "HUDSYNC") then CoopHudSync(server_slot); end
+	elseif (tk[1] == "HUDSYNC") then CoopHudSync(server_slot);
+	elseif (tk[1] == "PREF") then CoopSetPrefs(server_slot, tk); end
 end
 
 function CoopClientHit(server_slot, tk)

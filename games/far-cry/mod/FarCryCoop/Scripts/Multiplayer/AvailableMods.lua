@@ -10,6 +10,10 @@ AvailableMODList=
 	COOP=		{	team=0, 		respawntime=0,	mission="Training", },
 };
 
+-- Weapons in co-op behave as in single player (read by the mod's Weapons/RL.lua: the
+-- multiplayer rocket launcher fires only after aiming and holding the button)
+COOP_SPWeapons = 1
+
 -- FarCryCoop: start a campaign map as a co-op server, e.g. "coop_map Pier"
 function CoopMap(name)
 	local mission = Game:GetMapDefaultMission(name);
@@ -36,6 +40,60 @@ end
 Game:AddCommand("coop_map", "CoopMap(%%)","coop_map <campaign map>: start a campaign map as a co-op server");
 Game:AddCommand("coop_restart", "if (COOP_Map) then CoopMap(COOP_Map) end", "coop_restart: reload the current co-op map, clients stay connected");
 
+-- Co-op campaign from the normal menus: #CoopStart() on the host, then start the campaign or a
+-- level from the menu as in single player. Single player loads a level with the message
+-- "StartLevel <map>" (Campaign.lua menu, and every mission end: UI:PlayCutScene(video,
+-- "StartLevel <next map>")), which loads it as a new single-player game and drops every
+-- joined player. While co-op is on, such a message runs CoopMap(<map>) instead: the first
+-- one starts the co-op server, later ones change the map with the clients kept connected.
+-- The level-end video is skipped (joined players would not see it anyway).
+-- A joined player's game runs the same mission end and would start the next level as single
+-- player on its own: it ignores the message, the host changes the level for everyone.
+-- ponytail: COOP_Joined stays set after leaving; a joined player who then plays single player
+-- with the mod on in the same session gets no level change at a mission end
+function CoopStartLevel(msg)
+	if (type(msg) ~= "string") then return; end
+	local s, e, map = strfind(msg, "^StartLevel%s+(%S+)");
+	if (not map) then return; end
+	if (not COOP_Started) then
+		if (COOP_Joined and not Game:IsServer()) then
+			System:LogAlways("coop: ignored "..msg..", the host changes the level");
+			return 1;
+		end
+		return;
+	end
+	System:LogAlways("coop: "..msg.." -> CoopMap("..map..")");
+	if (COOP_Map) then
+		-- a mission end calls this from a level entity's script: unloading the level under it
+		-- crashed the host in CryEntitySystem. COOP gamerules load it on their next update,
+		-- as the multiplayer map cycle does
+		COOP_PendingMap = map;
+	else
+		CoopMap(map); -- from the menu: no level running yet
+	end
+	return 1;
+end
+function CoopWrapStartLevel()
+	if (not COOP_SendMessage) then
+		COOP_SendMessage = Game.SendMessage;
+		Game.SendMessage = function(self, msg)
+			if (not CoopStartLevel(msg)) then return COOP_SendMessage(self, msg); end
+		end
+	end
+	if (UI and not COOP_PlayCutScene) then
+		COOP_PlayCutScene = UI.PlayCutScene;
+		UI.PlayCutScene = function(self, video, msg)
+			if (not CoopStartLevel(msg)) then return COOP_PlayCutScene(self, video, msg); end
+		end
+	end
+end
+function CoopStart()
+	COOP_Started = 1;
+	CoopWrapStartLevel();
+	System:LogAlways("coop: on. Start the campaign or a level from the menu; friends join through LAN");
+end
+Game:AddCommand("coop_start", "CoopStart()", "coop_start: host the campaign; levels started from the menu or by a mission end become co-op");
+
 -- FarCryCoop test commands for the host (server console) ------------------------------------
 
 -- player entities of all connected slots; built without tinsert, which adds a field "n"
@@ -59,6 +117,22 @@ function CoopTeleport(pos, ang)
 	end
 	System:LogAlways(format("coop: teleported to %.0f,%.0f,%.0f", pos.x, pos.y, pos.z));
 end
+
+-- move every other player next to the leader (default: the host's player, else the first one)
+function CoopGather(leader)
+	leader = leader or _localplayer or CoopPlayers()[1];
+	if (not leader) then return; end
+	local t = leader:GetPos();
+	local k = 0;
+	for i, P in CoopPlayers() do
+		if (P ~= leader) then
+			k = k + 1;
+			P:SetPos({x = t.x + k, y = t.y, z = t.z}); -- 1 m apart so players do not stack
+		end
+	end
+	System:LogAlways(format("coop: gathered %d players at %s", k, leader:GetName()));
+end
+Game:AddCommand("coop_gather", "CoopGather()", "coop_gather: move all players to the host");
 
 -- campaign checkpoints are GameEvent entities (Properties.nId, nAllowedDeaths)
 function CoopGoto(n)

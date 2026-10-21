@@ -9,6 +9,8 @@ COOP_UPDATE_RATE = 50
 Coop_DefaultClientOnInit = ClientStuff.OnInit;
 function ClientStuff:OnInit()
 	Coop_DefaultClientOnInit(self);
+	-- written by the launcher: COOP_Color, COOP_Weapons, COOP_LoadoutMode (used by the host only)
+	Script:LoadScript("Mods/FarCryCoop/prefs.lua");
 	for name, def in WeaponClassesEx do
 		Game:AddWeapon(name);
 	end
@@ -18,6 +20,8 @@ function ClientStuff:OnInit()
 	-- A listen host plays the level intro as in single player: Mission:OnMapChange plays it only
 	-- when g_MapChanged is set, which single player's ClientStuff:OnMapChange does on a map change
 	if (Game:IsServer()) then g_MapChanged = 1; end
+	-- a joined player must not start the next level itself at a mission end (CoopStartLevel)
+	if (not Game:IsServer()) then COOP_Joined = 1; CoopWrapStartLevel(); end
 	CoopMonEvent("C", "map");
 end
 
@@ -25,6 +29,11 @@ Coop_DefaultClientOnUpdate = ClientStuff.OnUpdate;
 function ClientStuff:OnUpdate()
 	Coop_DefaultClientOnUpdate(self);
 	CoopMonitor("C");
+	local nxt = COOP_NextBoatSeats or 0;
+	if (not Game:IsServer() and (_time > nxt or _time + 2 < nxt)) then -- the host does it in gamerules
+		COOP_NextBoatSeats = _time + 1; -- second test: _time restarts with every map load
+		CoopBoatSeats();
+	end
 end
 
 -- The server dropped a player from a vehicle (COOP gamerules CoopWrapReleaseUser). The paraglider
@@ -91,8 +100,37 @@ Coop_DefaultOnSetPlayer = ClientStuff.OnSetPlayer;
 function ClientStuff:OnSetPlayer()
 	Coop_DefaultOnSetPlayer(self);
 	if (not Game:IsServer()) then Client:SendCommand("HUDSYNC"); end
+	-- launcher settings (COOP gamerules CoopSetPrefs); the host sends them too, over loopback
+	if (COOP_Color) then Client:SendCommand("PREF "..COOP_Color.." "..tostring(COOP_Weapons or "")); end
 	-- again once connected: asked in OnInit only, the server kept sending the default 20
 	if (Client and Client.SetUpdateRate) then Client:SetUpdateRate(COOP_UPDATE_RATE); end
+end
+
+-- shirt color of a player from the launcher (COOP gamerules CoopApplyPrefs). Multiplayer turns on
+-- the color mask shader with the "FX" command (BasicPlayer.SecondShader_TeamColoring, effect 2);
+-- the single-player rules never do. The shader's ColorR/G/B come from entity.cnt:GetColor(),
+-- which the single-player spawn leaves white and Lua cannot set: UpdatePlayerEffectParams is
+-- wrapped to use the launcher color (entity.COOP_Color) instead.
+ClientStuff.ServerCommandTable["PCOLOR"] = function(String, toktable)
+	local e = System:GetEntity(tonumber(toktable[2]) or 0);
+	local c = MultiplayerUtils and MultiplayerUtils.ModelColor[(tonumber(toktable[3]) or 1) + 1];
+	if (not e or not c or not e.pEffectStack) then return; end
+	if (not COOP_OrigUpdateEffectParams) then
+		COOP_OrigUpdateEffectParams = BasicPlayer.UpdatePlayerEffectParams;
+		BasicPlayer.UpdatePlayerEffectParams = function(entity)
+			COOP_OrigUpdateEffectParams(entity);
+			local c = entity.COOP_Color;
+			if (c and entity.pEffectStack[getn(entity.pEffectStack)] == 2) then
+				entity:SetShaderFloat("ColorR", c[1], 0, 0);
+				entity:SetShaderFloat("ColorG", c[2], 0, 0);
+				entity:SetShaderFloat("ColorB", c[3], 0, 0);
+			end
+		end
+	end
+	e.COOP_Color = c;
+	e.bUpdatePlayerEffectParams = 1;
+	BasicPlayer.SecondShader_TeamColoring(e);
+	CoopMonEvent("C", "color "..e:GetName().." "..toktable[3]);
 end
 
 -- AI animation started by the server (melee swing, see COOP gamerules CoopUpdateMelee)
