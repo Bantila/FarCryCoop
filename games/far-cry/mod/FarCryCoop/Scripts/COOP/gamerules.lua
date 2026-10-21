@@ -140,32 +140,62 @@ function CoopSendVehOut()
 	COOP_VehOut = {};
 end
 
--- A level has one paraglider with one seat: the first player to reach it flew, the others had
--- nothing to fly. Once a paraglider is taken and none is left free, spawn another one where the
--- taken one stood (remembered while it was free), up to one per player. The level's own glider
--- keeps its mission events (DriverIn); the copies are only for getting down.
--- ponytail: one shared start spot per level, copies are never removed
+-- A paraglider has one seat: the first player to reach it flew, the others had nothing to fly.
+-- Pier and Boat have 2 of them, Rebellion 3, each at its own launch spot. Once one is taken and
+-- no free one is left at its start spot (remembered while it was free), spawn another one there,
+-- up to one per player at that spot. The level's own gliders keep their mission events
+-- (DriverIn); the copies are only for getting down. ponytail: copies are never removed
 function CoopParagliders()
-	local free, total, taken = 0, 0, nil;
+	local gliders = {};
 	for i, e in System:GetEntities() do
 		if (e.classname == "Paraglider" and e.driverT) then
-			total = total + 1;
-			if (e.driverT.entity) then
-				if (e.COOP_Start) then taken = e; end
-			else
-				free = free + 1;
-				if (not e.COOP_Start) then e.COOP_Start = {pos = new(e:GetPos()), ang = new(e:GetAngles())}; end
+			if (not e.COOP_Start and not e.driverT.entity) then
+				e.COOP_Start = {pos = new(e:GetPos()), ang = new(e:GetAngles())};
+			end
+			if (e.COOP_Start) then gliders[getn(gliders) + 1] = e; end
+		end
+	end
+	for i = 1, getn(gliders) do
+		local taken = gliders[i];
+		if (taken.driverT.entity) then
+			local s, free, here = taken.COOP_Start.pos, 0, 0;
+			for j = 1, getn(gliders) do
+				local q = gliders[j].COOP_Start.pos;
+				if ((q.x-s.x)*(q.x-s.x) + (q.y-s.y)*(q.y-s.y) + (q.z-s.z)*(q.z-s.z) < 400) then -- same spot (20 m)
+					here = here + 1;
+					if (not gliders[j].driverT.entity) then free = free + 1; end
+				end
+			end
+			if (free == 0 and here < getn(CoopPlayers())) then
+				local g = Server:SpawnEntity("Paraglider");
+				if (not g) then System:LogAlways("coop: could not spawn a paraglider"); return; end
+				g:SetPos(s);
+				g:SetAngles(taken.COOP_Start.ang);
+				g:EnableSave(0);
+				g.COOP_Start = taken.COOP_Start;
+				CoopMonEvent("S", "paraglider copy "..g:GetName().." at "..taken:GetName());
+				return; -- one per second; the new one is free until someone takes it
 			end
 		end
 	end
-	if (not taken or free > 0 or total >= getn(CoopPlayers())) then return; end
-	local g = Server:SpawnEntity("Paraglider");
-	if (not g) then System:LogAlways("coop: could not spawn a paraglider"); return; end
-	g:SetPos(taken.COOP_Start.pos);
-	g:SetAngles(taken.COOP_Start.ang);
-	g:EnableSave(0);
-	g.COOP_Start = taken.COOP_Start;
-	CoopMonEvent("S", "paraglider copy "..g:GetName().." for player "..(total + 1));
+end
+
+-- Level scripts move the player after a cutscene (Cooler, Factory, Swamp, Volcano: to the
+-- CutsceneJack entity; Dam, Fort, Pier: to the camera) with _localplayer:SetPos, and on the
+-- server _localplayer is the host only: the others stayed behind. Wrap SetPos on the host's
+-- player entity (a new one after each respawn): a script jump of more than 20 m brings the
+-- others along at the next tick. Our own CoopTeleport/CoopGather move everyone anyway.
+function CoopWrapHostSetPos()
+	local P = _localplayer;
+	if (not P or P.COOP_SetPosWrapped) then return; end
+	P.COOP_SetPosWrapped = 1;
+	local old = P.SetPos;
+	P.SetPos = function(self, pos)
+		local q = self:GetPos();
+		local d = (pos.x-q.x)*(pos.x-q.x) + (pos.y-q.y)*(pos.y-q.y) + (pos.z-q.z)*(pos.z-q.z);
+		%old(self, pos);
+		if (d > 400) then COOP_GatherToHost = 1; end
+	end
 end
 
 -- Checkpoints: GameEvent:OnTimer (Event_Save of a mission's save trigger) reads _localplayer, so
@@ -436,6 +466,12 @@ function GameRules:OnUpdate(DeltaTime)
 	CoopWrapReleaseUser()
 	CoopSendVehOut()
 	call(CoopParagliders, {}, "x", function(msg) System:LogAlways("coop: paraglider error: "..tostring(msg)); end)
+	CoopWrapHostSetPos()
+	if COOP_GatherToHost then
+		COOP_GatherToHost = nil
+		CoopGather(_localplayer)
+		CoopMonEvent("S", "gather after a script moved the host")
+	end
 	CoopBoatSeats()
 	call(CoopApplyLoadouts, {}, "x", function(msg) System:LogAlways("coop: loadout error: "..tostring(msg)); end)
 	call(CoopApplyPrefs, {}, "x", function(msg) System:LogAlways("coop: prefs error: "..tostring(msg)); end)

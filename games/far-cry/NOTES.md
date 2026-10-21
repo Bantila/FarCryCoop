@@ -183,7 +183,7 @@ Fix 11 (ASI): CryInput builds its key table (scan code -> character, plain/Shift
 
 `launcher/` is a Tauri 2 app (Rust + one HTML page): `FarCryCoopLauncher.exe` in the game folder, next to `Bin32`, not in it: Windows loads DLLs from the exe folder first, and the old `version.dll` and `dbghelp.dll` in `Bin32` crashed it (access violation at address 0). It runs a lobby (below) or waits for a Steam invite. It also sets the player name, shirt color and loadout. It talks to the game only through files the mod already reads:
 - `Mods\FarCryCoop\prefs.lua` (ASCII, no BOM): `COOP_Color` (0..9, `MultiplayerUtils.ModelColor`), `COOP_Weapons` (up to 4 of Falcon, MP5, P90, M4, AG36, OICW, Shotgun, SniperRifle, M249, RL), `COOP_LoadoutMode` (only the host's value counts). COOP `ClientStuff:OnInit` loads it.
-- `Mods\FarCryCoop\join.txt`: one console line run by the ASI. The host gets `#CoopMap("<map>")`, a join by IP gets `connect <ip>`. The Steam bridge writes the same file on an invite.
+- `Mods\FarCryCoop\join_<pid>.txt` (first `join.txt`, see below): one console line run by the ASI of that game. The host gets `#CoopMap("<map>")`, a client `Game:Connect("<ip>:49001",1)`, each with its own settings in front. The Steam bridge writes the shared `join.txt` on an invite.
 
 In game:
 - In `OnSetPlayer` each client sends `PREF <color> <weapons>`. `GameRules:OnClientCmd` keeps the values per server slot (`COOP_Prefs`).
@@ -195,7 +195,7 @@ In game:
   - whether `Script:LoadScript("Mods/FarCryCoop/prefs.lua")` finds a loose file next to the pak;
   - whether the host's `Client:SendCommand` reaches `OnClientCmd` over loopback.
 
-Lobby (`launcher/src/lobby.rs`): the host's launcher listens on TCP 49002, friends' launchers connect by IP. One JSON object per line. Clients send their name, color and weapons. The host checks them (name up to 24 characters, color 0..9, only the 10 weapons) and sends the player list, map and loadout mode to everyone after each change. "Start": everyone's launcher starts the game, and the host's game gets `#CoopMap`. The host's launcher then tries to bind UDP 49001 once a second; when it cannot, the server is up and it sends "go". The clients' launchers then write `connect <host ip>` into `join.txt`. Checked with two launchers on one PC: join, a color change shows up on the host, leaving drops the player from the list. A name with `<b>` shows as text. Not yet tried: "Start" with two games. The host needs TCP 49002 open as well as UDP 49001. The UI uses the colors of the game menu (`UISystemCfg.lua`: `181 246 188` focus, `47 66 53` border).
+Lobby (`launcher/src/lobby.rs`): the host's launcher listens on TCP 49002, friends' launchers connect by IP. One JSON object per line. Clients send their name, color and weapons. The host checks them (name up to 24 characters, color 0..9, only the 10 weapons) and sends the player list, map and loadout mode to everyone after each change. "Start": everyone's launcher starts the game, and the host's game gets `#CoopMap`. The host's launcher then tries to bind UDP 49001 once a second; when it cannot, the server is up and it sends "go". The clients' launchers then write the connect line for their game. Checked with two launchers on one PC: join, a color change shows up on the host, leaving drops the player from the list. A name with `<b>` shows as text. Not yet tried: "Start" with two games. The host needs TCP 49002 open as well as UDP 49001. The UI uses the colors of the game menu (`UISystemCfg.lua`: `181 246 188` focus, `47 66 53` border).
 
 Toolchain: Rust (i686 host and target) in `E:\FarCryCoop\Data\rustup` and `Data\cargo`, linked with the MSVC in `D:\TailCore\toolchain\vs` and the x86 SDK libs in `Tools\winsdk-x86`. There are no x64 SDK libs, so the launcher is 32-bit. See [launcher/README.md](launcher/README.md).
 
@@ -214,6 +214,41 @@ Security review after the push:
 Crysis co-op ([SeniorStackOverflow/crysis-coop](https://github.com/SeniorStackOverflow/crysis-coop), CryEngine 2, found through the coop-anything Crysis page). It has no license (NOASSERTION), so only its ideas are used here, not its code.
 - **Joining:** a 6-digit join code per host, UDP hole punching, and a WebSocket relay fallback on one VPS on port 443. This makes play possible without Steam or a VPN, and is a candidate after the Spacewar bridge.
 - **Other features:** downed players can be revived, the whole team resets to the checkpoint when everyone is down, inventories are kept per player, and clients rejoin by themselves after the host reloads a level.
+
+## Level survey (2026-10-21)
+
+Every campaign level's `level.pak` (mission XML, `moviedata.xml`, level Lua) scanned for what matters to co-op (script: `Tempnalyze_levels.py`, not committed). Order as in `DEFIANT`.
+
+| Level | Vehicles | Helicopters | Mounted guns | Cutscene sequences |
+|---|---|---|---|---|
+| Training | Boat 3, FWDVehicle 3, Buggy 4 | Gunship 7 | 4 | 3 |
+| Carrier | InflatableBoat 1 | Gunship 2 | 3 | 2 |
+| Fort | Boat 5, Buggy 1, InflatableBoat 1 | Gunship 4, CargoChopper 1 | 4 | 6 |
+| Pier | Boat 2, FWDVehicle 5, Buggy 5, Paraglider 2 | Gunship 6, CargoChopper 1 | 7 | 7 |
+| Research | Boat 2 | Gunship 3 | 2 | 1 |
+| Treehouse | FWDVehicle 3, Bigtrack 1 | Gunship 2 | 5 | 0 |
+| Bunker | - | Gunship 1 | 1 | 0 |
+| Steam | Boat 5, FWDVehicle 3 | Gunship 3 | 6 | 3 |
+| Regulator | Bigtrack 1, Forklift 1 | CargoChopper 2 | 1 | 1 |
+| Control | - | - | 1 | 0 |
+| Rebellion | FWDVehicle 8, Buggy 4, Bigtrack 1, Paraglider 3 | Gunship 5, CargoChopper 1 | 16 | 0 |
+| Archive | Forklift 1 | Gunship 2, CargoChopper 1 | 2 | 1 |
+| Cooler | - | - | 1 | 1 |
+| Boat | Boat 12, FWDVehicle 5, Buggy 1, InflatableBoat 4, Bigtrack 2, Paraglider 2 | Gunship 3 | 8 | 1 |
+| Catacombs | Buggy 2 | CargoChopper 2 | 12 | 0 |
+| River | Boat 9, FWDVehicle 1, InflatableBoat 4 | Gunship 2 | 16 | 2 |
+| Swamp | FWDVehicle 6, Forklift 1 | Gunship 1 | 5 | 4 |
+| Factory | Forklift 2 | - | 0 | 1 |
+| Dam | FWDVehicle 1, Buggy 1, Bigtrack 1 | Gunship 1 | 7 | 2 |
+| Volcano | - | - | 0 | 3 |
+
+Findings:
+- **Paragliders:** Pier and Boat have 2, Rebellion 3, each at its own launch spot. The copy logic now works per spot: a copy appears at the start of the glider that was taken, when no free glider is left within 20 m of it.
+- **Level scripts and `_localplayer`:** after a cutscene, Cooler, Factory, Swamp and Volcano move `_localplayer` to the `CutsceneJack` entity; Dam, Fort and Pier move it to the cutscene camera. On the server `_localplayer` is the host only, so the others stayed behind. `CoopWrapHostSetPos` wraps `SetPos` on the host's player entity, and a script jump over 20 m gathers the others at the next tick. Not yet seen in game.
+- **Other uses, left alone:** every level calls `SavePlayerElements` on the host at the level end, which is covered by the per-slot carry-over. A mission failure (`timetodie`) kills the host only, who respawns at the checkpoint. The mutated-arms effect (Dam, Volcano) and Swamp's `health=255` are host-only.
+- **Helicopters:** they are on 16 of 20 levels; Boat has the 3-gunship boss. They are now in every snapshot (ASI).
+- **Mounted guns:** they are on 18 levels. Using them from a client is not tested yet.
+- **Mission end:** Volcano has no `StartLevel`, because it is the last level.
 
 ## Next steps
 

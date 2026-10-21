@@ -72,7 +72,7 @@ Without the launcher: start `Bin32\FarCryCoop.bat`. The host types `#CoopMap("pi
 - **Test on one PC:** host game on the left, and once its server is up, a client game on the right that joins by itself.
 - **Loadout on:** every spawn gives your 4 weapons with full ammo. Weapons taken from enemies carry over to the next level, with the ammo refilled.
 
-The launcher talks to the game only through two files: `Mods\FarCryCoop\prefs.lua` (color, weapons, loadout mode) and `Mods\FarCryCoop\join.txt` (one console line run by the ASI). Details: [games/far-cry/launcher/README.md](games/far-cry/launcher/README.md).
+The launcher talks to the game only through two files: `Mods\FarCryCoop\prefs.lua` (color, weapons, loadout mode) and `Mods\FarCryCoop\join_<pid>.txt` (one console line, run by the ASI in the game with that process id; the Steam bridge uses the shared `join.txt`). Details: [games/far-cry/launcher/README.md](games/far-cry/launcher/README.md).
 
 ## Host console commands
 
@@ -95,7 +95,7 @@ Type them in the console (`~`) as `#Function()`; the short form (`coop_god 1`) w
 
 ```
  FarCryCoopLauncher.exe ──TCP 49002── other launchers (lobby)
-        │ prefs.lua, join.txt
+        │ prefs.lua, join_<pid>.txt
         ▼
  FarCry.exe -DEVMODE -MOD:FarCryCoop
   ├─ Mods\FarCryCoop\FarCryCoop.pak   Lua: game type COOP = single-player rules + co-op fixes
@@ -112,7 +112,7 @@ Type them in the console (`~`) as `#Function()`; the short form (`coop_god 1`) w
   - **Dedicated server:** cutscene and sound callbacks no longer crash it, and 1 ms timer resolution gives 35 snapshots a second.
   - **Props** that move on the server are sent to clients.
   - **Keyboard:** US layout for the game's key table.
-  - **Console:** one console line from `join.txt` runs on the main thread.
+  - **Console:** one console line from `join_<pid>.txt` (launcher) or `join.txt` (Steam bridge) runs on the main thread.
 - **Steam bridge** (`steam/FarCryCoopSteam.c`): runs as Spacewar, shows "Join" in the Steam friends list and relays the connection through `127.0.0.1:49011`.
 - **Launcher** (`launcher/`): Rust + Tauri 2, one HTML page, lobby over TCP.
 

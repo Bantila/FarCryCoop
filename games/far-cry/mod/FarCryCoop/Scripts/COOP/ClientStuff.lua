@@ -10,7 +10,7 @@ Coop_DefaultClientOnInit = ClientStuff.OnInit;
 function ClientStuff:OnInit()
 	Coop_DefaultClientOnInit(self);
 	-- written by the launcher: COOP_Color, COOP_Weapons, COOP_LoadoutMode (used by the host only).
-	-- The launcher's console line (join.txt) sets them first: two games on one PC share this file.
+	-- The launcher's console line (join_<pid>.txt) sets them first: two games on one PC share this file.
 	if (not COOP_Color) then Script:LoadScript("Mods/FarCryCoop/prefs.lua"); end
 	for name, def in WeaponClassesEx do
 		Game:AddWeapon(name);
