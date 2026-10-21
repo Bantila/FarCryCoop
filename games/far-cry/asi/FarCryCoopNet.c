@@ -561,32 +561,41 @@ static void keyboardUS(void)
 // included) is wrapped and polls the file twice a second, after the frame. Console:
 // ISystem::GetIConsole +0x60, IConsole::ExecuteString +0x80 (CXConsole vtable 0x36571c58;
 // +0x84 is Exit, which shows "No comments from application" and quits the game).
-static char g_join[600]; // Mods\FarCryCoop\join.txt
+// The launcher writes join_<pid>.txt for the one game it started: with two games on one PC a
+// listen host with no client yet sends no snapshots, so hosting() was 0 and the host's game took
+// the client's "connect" line from the shared join.txt and timed out connecting to itself.
+static char g_join[600], g_joinOwn[600]; // Mods\FarCryCoop\join.txt, join_<pid>.txt
 static BYTE(__fastcall *oGameUpdate)(void *, void *);
 static DWORD g_joinTick;
+static void runJoin(const char *file)
+{
+	char cmd[512];
+	DWORD n = 0;
+	void *sys, *con;
+	HANDLE f = CreateFileA(file, 0x80000000, 0, 0, 3, 0x80, 0); // GENERIC_READ, OPEN_EXISTING
+	if (f == (HANDLE)-1)
+		return;
+	ReadFile(f, cmd, sizeof cmd - 1, &n, 0);
+	CloseHandle(f);
+	DeleteFileA(file);
+	while (n && (cmd[n - 1] == '\r' || cmd[n - 1] == '\n'))
+		n--;
+	cmd[n] = 0;
+	sys = getISystem();
+	con = sys ? ((void *(__fastcall *)(void *, void *))VFN(sys, 0x60))(sys, 0) : 0;
+	logf("join: %s", cmd);
+	if (con && n)
+		((void(__fastcall *)(void *, void *, const char *, int, int))VFN(con, 0x80))(con, 0, cmd, 0, 1);
+	logf("join: done");
+}
 static BYTE __fastcall hGameUpdate(void *game, void *edx)
 {
 	BYTE r = oGameUpdate(game, edx); // after the frame, as the console runs typed lines
-	if (GetTickCount() - g_joinTick > 500 && !hosting()) { // a host leaves it to the other window (bridge -loop)
-		HANDLE f;
+	if (GetTickCount() - g_joinTick > 500) {
 		g_joinTick = GetTickCount();
-		f = CreateFileA(g_join, 0x80000000, 0, 0, 3, 0x80, 0); // GENERIC_READ, OPEN_EXISTING
-		if (f != (HANDLE)-1) {
-			char cmd[512];
-			DWORD n = 0;
-			void *sys = getISystem(), *con;
-			ReadFile(f, cmd, sizeof cmd - 1, &n, 0);
-			CloseHandle(f);
-			DeleteFileA(g_join);
-			while (n && (cmd[n - 1] == '\r' || cmd[n - 1] == '\n'))
-				n--;
-			cmd[n] = 0;
-			con = sys ? ((void *(__fastcall *)(void *, void *))VFN(sys, 0x60))(sys, 0) : 0;
-			logf("steam: %s", cmd);
-			if (con && n)
-				((void(__fastcall *)(void *, void *, const char *, int, int))VFN(con, 0x80))(con, 0, cmd, 0, 1);
-			logf("steam: done");
-		}
+		runJoin(g_joinOwn);
+		if (!hosting()) // a host leaves the shared file to the other window (bridge -loop)
+			runJoin(g_join);
 	}
 	return r;
 }
@@ -708,6 +717,9 @@ BOOL __stdcall DllMain(HANDLE self, DWORD reason, void *reserved)
 	for (cut = 0; cut < n; cut++) // path still ends at <game>
 		g_join[cut] = path[cut];
 	wvsprintfA(g_join + n, "\\Mods\\FarCryCoop\\join.txt", 0);
+	for (cut = 0; cut < n; cut++)
+		g_joinOwn[cut] = path[cut];
+	wvsprintfA(g_joinOwn + n, "\\Mods\\FarCryCoop\\join_%u.txt", (va_list)(args + 1));
 	wvsprintfA(path + n, "\\Mods\\FarCryCoop\\netlog_%s_%u.txt", (va_list)args);
 	g_log = CreateFileA(path, 0x40000000, 1, 0, 2, 0x80, 0); // GENERIC_WRITE, FILE_SHARE_READ, CREATE_ALWAYS
 	logf("FarCryCoopNet loaded in %s", name);

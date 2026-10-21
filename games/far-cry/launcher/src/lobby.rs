@@ -23,6 +23,7 @@ struct Lobby {
     next_id: u32,
     host_ip: String,
     started: bool, // "start" happens once; a client acts on "go" only after it
+    game: u32,     // client: pid of the game it started, which gets the "connect" line
 }
 
 static LOBBY: Mutex<Option<Lobby>> = Mutex::new(None);
@@ -81,7 +82,7 @@ fn read_lines(s: TcpStream, mut on_line: impl FnMut(Value)) {
 pub fn host(app: AppHandle, me: Value, map: String, loadout: bool) -> Result<(), String> {
     let listener = TcpListener::bind(("0.0.0.0", PORT)).map_err(|e| format!("TCP {}: {}", PORT, e))?;
     let mut l = Lobby { host: true, players: vec![(0, clean_me(&me))], conns: vec![], map, loadout, next_id: 1, host_ip: String::new(),
-        started: false };
+        started: false, game: 0 };
     broadcast_state(&app, &mut l);
     *LOBBY.lock().unwrap() = Some(l);
     std::thread::spawn(move || {
@@ -128,7 +129,7 @@ pub fn join(app: AppHandle, ip: String, me: Value) -> Result<(), String> {
     send(&mut s, &json!({ "t": "me", "me": me }));
     let r = s.try_clone().map_err(|e| e.to_string())?;
     *LOBBY.lock().unwrap() = Some(Lobby { host: false, players: vec![], conns: vec![(0, s)], map: String::new(),
-        loadout: false, next_id: 0, host_ip: ip, started: false });
+        loadout: false, next_id: 0, host_ip: ip, started: false, game: 0 });
     std::thread::spawn(move || {
         read_lines(r, |v| {
             let mut guard = LOBBY.lock().unwrap();
@@ -141,11 +142,11 @@ pub fn join(app: AppHandle, ip: String, me: Value) -> Result<(), String> {
                 Some("start") if !l.started => {
                     l.started = true;
                     let me = crate::me();
-                    let _ = crate::start_game(&me, l.loadout, None);
+                    l.game = crate::start_game(&me, l.loadout, None).unwrap_or(0);
                 }
-                Some("go") if l.started => {
+                Some("go") if l.game != 0 => {
                     if let Ok(line) = crate::connect_line(&l.host_ip, &crate::me()) {
-                        let _ = crate::write_join(&line);
+                        let _ = crate::write_join(l.game, &line);
                     }
                 }
                 _ => {}

@@ -1,7 +1,7 @@
 // FarCryCoop launcher: a lobby where friends see each other's shirt color and loadout, then the
 // host starts the game for everyone; or wait for a Steam invite. Talks to the game only through
 // files the mod already reads: Mods\FarCryCoop\prefs.lua (COOP ClientStuff) and
-// Mods\FarCryCoop\join.txt (FarCryCoopNet.asi runs its one console line).
+// Mods\FarCryCoop\join_<pid>.txt (FarCryCoopNet.asi in that game runs its one console line).
 // Lives in the game folder, next to Bin32.
 #![windows_subsystem = "windows"]
 
@@ -104,8 +104,10 @@ fn connect_line(ip: &str, me: &Value) -> Result<String, String> {
     Ok(format!("#{} Game:Connect(\"{}\",1)", prefs(me, false), addr))
 }
 
-fn write_join(line: &str) -> Result<(), String> {
-    std::fs::write(mod_dir()?.join("join.txt"), line).map_err(|e| e.to_string())
+// the line for one game we started: FarCryCoopNet.asi in that process reads join_<pid>.txt
+// (join.txt is shared by every game on the PC; the Steam bridge writes that one)
+fn write_join(pid: u32, line: &str) -> Result<(), String> {
+    std::fs::write(mod_dir()?.join(format!("join_{}.txt", pid)), line).map_err(|e| e.to_string())
 }
 
 // write prefs.lua, then start the Steam bridge and the game; `line` runs in the game console
@@ -114,12 +116,7 @@ fn start_game(me: &Value, loadout: bool, line: Option<String>) -> Result<u32, St
     let moddir = mod_dir()?;
     // Lua 4 reads it: plain ASCII, no BOM
     std::fs::write(moddir.join("prefs.lua"), prefs(me, loadout)).map_err(|e| e.to_string())?;
-    match line {
-        Some(l) => write_join(&l)?,
-        None => {
-            let _ = std::fs::remove_file(moddir.join("join.txt")); // an old line must not run
-        }
-    }
+    let _ = std::fs::remove_file(moddir.join("join.txt")); // an old line must not run
     // one bridge per PC: a second one cannot bind UDP 49011 and just stays open
     let steam = moddir.join("Steam");
     if steam.join("FarCryCoopSteam.exe").exists() && !running("FarCryCoopSteam.exe") {
@@ -130,6 +127,9 @@ fn start_game(me: &Value, loadout: bool, line: Option<String>) -> Result<u32, St
         .current_dir(&bin)
         .spawn()
         .map_err(|e| e.to_string())?;
+    if let Some(l) = line {
+        write_join(game.id(), &l)?;
+    }
     Ok(game.id())
 }
 
@@ -185,8 +185,8 @@ fn place_window(pid: u32, left: bool) {
 }
 
 // test on one PC: the host's game on the left loads the map; once its server is up, a second
-// game on the right connects to 127.0.0.1. The client starts only then: both games poll the same
-// join.txt, and the host's game stops polling once it hosts. The client gets the next shirt color.
+// game on the right connects to 127.0.0.1 (started only then, so there is a server to connect
+// to). Each game gets its line in its own join_<pid>.txt. The client gets the next shirt color.
 #[tauri::command]
 fn launch_test(map: String, loadout: bool) -> Result<(), String> {
     let me = me();
