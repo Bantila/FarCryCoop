@@ -141,6 +141,14 @@ ClientStuff.ServerCommandTable["PCOLOR"] = function(String, toktable)
 	CoopMonEvent("C", "color "..e:GetName().." "..toktable[3]);
 end
 
+-- an entity hidden or shown by a mission event on the server (COOP gamerules CoopWrapHide)
+ClientStuff.ServerCommandTable["HIDE"] = function(String, toktable)
+	local e = System:GetEntity(tonumber(toktable[2]) or 0);
+	if (Game:IsServer() or not e) then return; end
+	e:Hide(tonumber(toktable[3]) or 0);
+	CoopMonEvent("C", "hide "..e:GetName().." "..tostring(toktable[3]));
+end
+
 -- AI animation started by the server (melee swing, see COOP gamerules CoopUpdateMelee)
 ClientStuff.ServerCommandTable["ANIM"] = function(String, toktable)
 	local e = System:GetEntity(tonumber(toktable[2]) or 0);

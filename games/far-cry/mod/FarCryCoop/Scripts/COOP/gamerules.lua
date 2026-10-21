@@ -487,6 +487,7 @@ function GameRules:OnUpdate(DeltaTime)
 	for i, e in System:GetEntities() do
 		if e.ai and not e.COOP_AnimWrapped then CoopWrapAnim(e) end
 		if e.classname == "GameEvent" and not e.COOP_Wrapped then CoopWrapGameEvent(e) end
+		if (e.Event_Hide or e.Event_UnHide) and not e.COOP_HideWrapped then CoopWrapHide(e) end
 		if e.Behaviour and e.cnt and e.Properties and e.Properties.species and not e.COOP_Awake
 			and e.Enemy_Hidden ~= 1 then
 			local r2 = (e.Properties.bSleepOnSpawn == 1) and sleeper2 or wake2
@@ -547,7 +548,31 @@ function CoopWrapHud()
 end
 CoopWrapHud();
 
+-- Hide/UnHide events (mission triggers showing and hiding things: the freighter of Boat is
+-- hidden by ProximityTrigger_HIDE_SHIP and shown again by Trigger_ACTIVATE_FREIGHTER) run only
+-- on the machine where the trigger fired, so the freighter stayed hidden for a client. Each
+-- entity's Event_Hide/Event_UnHide is wrapped (per entity: class-level wraps do not reach
+-- existing entities, see AreaTrigger in NOTES) to tell the clients ("HIDE <id> 1/0", COOP
+-- ClientStuff), and a joining client gets the current state (CoopHudSync).
+COOP_HideState = {} -- this file runs on every map load
+function CoopWrapHide(e)
+	e.COOP_HideWrapped = 1;
+	local wrap = function(name, v)
+		local old = %e[name];
+		if (not old) then return; end
+		%e[name] = function(self, a, b)
+			local r = %old(self, a, b);
+			COOP_HideState[self.id] = %v;
+			Server:BroadcastCommand("HIDE "..self.id.." "..%v);
+			return r;
+		end
+	end
+	wrap("Event_Hide", 1);
+	wrap("Event_UnHide", 0);
+end
+
 function CoopHudSync(server_slot)
+	for id, v in COOP_HideState do server_slot:SendCommand("HIDE "..id.." "..v); end
 	server_slot:SendCommand("MHUD flash ");
 	for i, o in (Hud and Hud.objectives or {}) do
 		if (type(o) == "table") then

@@ -249,6 +249,7 @@ Findings:
 - **Helicopters:** they are on 16 of 20 levels; Boat has the 3-gunship boss. They are now in every snapshot (ASI).
 - **Mounted guns:** they are on 18 levels. Using them from a client is not tested yet.
 - **Mission end:** Volcano has no `StartLevel`, because it is the last level.
+- **Hide/UnHide (owner, Boat):** the freighter was missing for the client. `Freighter2` (396) and its doors (650) are `BasicEntity`, hidden by `ProximityTrigger_HIDE_SHIP` and shown again by `Trigger_ACTIVATE_FREIGHTER`. `Event_Hide`/`Event_UnHide` run only where the trigger fired, so the client kept the freighter hidden. 12 entity classes have `Event_Hide`. Fix: the server wraps them per entity and broadcasts `HIDE <id> 1/0`; a joining client gets the current state with `HUDSYNC`. Not yet seen in game.
 
 ## Next steps
 
