@@ -151,9 +151,9 @@ ClientStuff.ServerCommandTable["ANIM"] = function(String, toktable)
 end
 
 -- sequences forwarded by the server (see COOP gamerules); names may contain spaces ("HIDE ALL").
--- Cutscene-flagged sequences stay off like on the server (mov_NoCutscenes).
--- A listen host plays them (COOP gamerules switch them back on for it).
-if (not Game:IsServer()) then setglobal("mov_NoCutscenes", 1); end
+-- Cutscenes play here too: only a dedicated server turns them off (it has no input or sound,
+-- coop_map), and it still forwards every sequence it starts. A client has both.
+if (not Game:IsServer()) then setglobal("mov_NoCutscenes", 0); end
 ClientStuff.ServerCommandTable["SEQ"] = function(String, toktable)
 	CoopMonEvent("C", "sequence "..strsub(String, 5));
 	if (not Game:IsServer()) then Movie:PlaySequence(strsub(String, 5)); end

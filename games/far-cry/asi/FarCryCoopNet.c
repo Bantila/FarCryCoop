@@ -170,11 +170,15 @@ static void savePos(void *ent) // IEntity::GetPos(bool bWorldOnly) at vtable +0x
 // suppress, and they move). IEntity vtable: +0x04 GetPos, +0xc4 GetId, +0xd0 GetNetPresence,
 // +0xd4 SetNetPresence (SetNetPresence(true) after SetContainer in the vehicle spawn code,
 // 0x33071498), +0xe8 GetClassId (WORD, compared with the class ids at 0x33071930).
+static int heliClass(WORD c)
+{
+	return c == 101 || c == 102; // CargoChopper, Gunship
+}
 static int syncedClass(WORD c)
-{ // ClassRegistry.lua: Paraglider, RigidBody, DestroyableObject, BasicEntity. Not CargoChopper (101) and
-  // Gunship (102): synced, the gunship flew in jerks on the client; the owner prefers it left
-  // hanging where it spawned (helicopters are a host-only feature, see NOTES)
-	return c == 95 || c == 131 || c == 133 || c == 146; // + Paraglider: frozen on clients of a listen host
+{ // ClassRegistry.lua: Paraglider, RigidBody, DestroyableObject, BasicEntity, CargoChopper, Gunship.
+  // Helicopters at a normal priority got ~7 updates/s and flew in jerks on the client: hUpd
+  // sends them in every snapshot (Boat has a gunship boss, the owner wants them for everyone)
+	return c == 95 || c == 131 || c == 133 || c == 146 || heliClass(c); // + Paraglider: frozen on clients of a listen host
 }
 static float g_firstPos[65536][3];
 static BYTE g_posSeen[65536];
@@ -301,12 +305,14 @@ static void __fastcall hUpd(void *self, void *edx, Vec3 viewer)
 	DWORD prio;
 	void **ent;
 	oUpd(self, edx, viewer);
+	ent = *(void ***)((BYTE *)self + 4); // m_pEntity
+	if (ent && heliClass(((WORD(__fastcall *)(void *, void *))VFN(ent, 0xe8))(ent, 0)))
+		*(DWORD *)((BYTE *)self + 0x1c) = 500000; // every snapshot, still below the slot's own player
 	prio = *(DWORD *)((BYTE *)self + 0x1c); // m_nPriority
 	s.upd++;
 	if (!prio)
 		s.upd0++;
 	if (prio >= 1000000) {
-		ent = *(void ***)((BYTE *)self + 4); // m_pEntity
 		s.updHi++;
 		s.plPrio = prio;
 		s.plId = 0;
