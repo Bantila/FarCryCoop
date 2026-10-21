@@ -88,6 +88,7 @@
     <input type="text" id="ip" placeholder="192.168.1.5">
     <button class="item" id="join">› Войти в лобби / Join lobby</button>
     <button class="item" id="steam">› Ждать приглашения Steam / Steam invite</button>
+    <button class="item" id="test">› Тест на одном ПК / Test on one PC</button>
   </section>
 
   <section class="panel hidden" id="room">
@@ -193,7 +194,8 @@ $('ip').onchange = e => { s.ip = e.target.value.trim(); changed(); };
 $('host').onclick = () => (hosting = true) && act('lobby_host', { map: s.map, loadout: s.loadout }, 'Лобби создано, ждём игроков / Lobby is up');
 $('join').onclick = () => (hosting = false, act('lobby_join', { ip: s.ip }, 'В лобби / Joined'));
 $('steam').onclick = () => act('launch_steam', {}, 'Игра запускается, примите приглашение в Steam / Accept the Steam invite');
-$('start').onclick = () => act('lobby_start', {});
+$('test').onclick = () => act('launch_test', { map: s.map, loadout: s.loadout }, 'Хост слева, клиент справа подключится сам / Host left, client right joins by itself');
+$('start').onclick =() => act('lobby_start', {});
 $('leave').onclick = () => act('lobby_leave', {});
 
 (async () => {

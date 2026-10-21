@@ -54,7 +54,7 @@ Friend: start `FarCryCoop.bat`, then Multiplayer → LAN, or in the console: `co
 4. Lobby: "Start" starts the game for everyone, and friends connect by themselves.
 5. Steam: "Join Game" connects without an IP.
 
-If something does not work, send `log.txt` from the Far Cry folder, the `netlog_*.txt` files from `Mods\FarCryCoop`, and the text of the "Far Cry co-op: Steam" window. You can test two games on one PC, but the lobby is unreliable there: both games read the same `join.txt`.
+If something does not work, send `log.txt` from the Far Cry folder, the `netlog_*.txt` files from `Mods\FarCryCoop`, and the text of the "Far Cry co-op: Steam" window. To test alone, press "Test on one PC": the host's game opens on the left and loads the map, then a second game opens on the right and joins by itself, with the next shirt color. The lobby is unreliable on one PC (both games read the same `join.txt`), so use this button there.
 
 ## Useful console commands (host)
 - `#CoopGod(1)` / `#CoopGod(0)` — god mode for everyone on/off

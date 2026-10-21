@@ -69,6 +69,7 @@ Without the launcher: start `Bin32\FarCryCoop.bat`. The host types `#CoopMap("pi
 - **Lobby:** the host creates it, friends join by IP. Everyone sees the player list with shirt colors and loadouts, and the host's map and loadout mode.
 - **Start:** the game starts for everyone; the host's game loads the map, and friends connect once the host's server is up.
 - **Steam invite:** starts the game and waits for the host's invite from the Steam friends list.
+- **Test on one PC:** host game on the left, and once its server is up, a client game on the right that joins by itself.
 - **Loadout on:** every spawn gives your 4 weapons with full ammo. Weapons taken from enemies carry over to the next level, with the ammo refilled.
 
 The launcher talks to the game only through two files: `Mods\FarCryCoop\prefs.lua` (color, weapons, loadout mode) and `Mods\FarCryCoop\join.txt` (one console line run by the ASI). Details: [games/far-cry/launcher/README.md](games/far-cry/launcher/README.md).

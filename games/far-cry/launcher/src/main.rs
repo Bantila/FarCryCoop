@@ -109,7 +109,7 @@ fn write_join(line: &str) -> Result<(), String> {
 }
 
 // write prefs.lua, then start the Steam bridge and the game; `line` runs in the game console
-fn start_game(me: &Value, loadout: bool, line: Option<String>) -> Result<(), String> {
+fn start_game(me: &Value, loadout: bool, line: Option<String>) -> Result<u32, String> {
     let bin = bin32()?;
     let moddir = mod_dir()?;
     // Lua 4 reads it: plain ASCII, no BOM
@@ -125,11 +125,88 @@ fn start_game(me: &Value, loadout: bool, line: Option<String>) -> Result<(), Str
     if steam.join("FarCryCoopSteam.exe").exists() && !running("FarCryCoopSteam.exe") {
         Command::new(steam.join("FarCryCoopSteam.exe")).current_dir(&steam).spawn().map_err(|e| e.to_string())?;
     }
-    Command::new(bin.join("FarCry.exe"))
+    let game = Command::new(bin.join("FarCry.exe"))
         .args(["-DEVMODE", "-MOD:FarCryCoop"])
         .current_dir(&bin)
         .spawn()
         .map_err(|e| e.to_string())?;
+    Ok(game.id())
+}
+
+// a Far Cry server on this PC holds UDP 49001
+fn server_up() -> bool {
+    std::net::UdpSocket::bind(("0.0.0.0", 49001)).is_err()
+}
+
+#[link(name = "user32")]
+extern "system" {
+    fn EnumWindows(f: extern "system" fn(isize, isize) -> i32, l: isize) -> i32;
+    fn GetWindowThreadProcessId(w: isize, pid: *mut u32) -> u32;
+    fn IsWindowVisible(w: isize) -> i32;
+    fn GetWindowRect(w: isize, r: *mut [i32; 4]) -> i32;
+    fn MoveWindow(w: isize, x: i32, y: i32, cx: i32, cy: i32, repaint: i32) -> i32;
+    fn SystemParametersInfoW(action: u32, p1: u32, p2: *mut [i32; 4], ini: u32) -> i32;
+}
+
+// visible top-level window of a process (l points to [pid, found window])
+extern "system" fn find_window(w: isize, l: isize) -> i32 {
+    let want = unsafe { &mut *(l as *mut (u32, isize)) };
+    let mut pid = 0;
+    unsafe { GetWindowThreadProcessId(w, &mut pid) };
+    if pid == want.0 && unsafe { IsWindowVisible(w) } != 0 {
+        want.1 = w;
+        return 0;
+    }
+    1
+}
+
+// put the game window of `pid` at the left or right edge of the work area, as tools/launch-two.ps1
+fn place_window(pid: u32, left: bool) {
+    let mut found = (pid, 0isize);
+    for _ in 0..60 {
+        unsafe { EnumWindows(find_window, &mut found as *mut _ as isize) };
+        if found.1 != 0 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    if found.1 == 0 {
+        return;
+    }
+    std::thread::sleep(std::time::Duration::from_secs(5)); // the game resizes its window once after it appears
+    let (mut area, mut r) = ([0i32; 4], [0i32; 4]);
+    unsafe {
+        SystemParametersInfoW(0x30, 0, &mut area, 0); // SPI_GETWORKAREA
+        GetWindowRect(found.1, &mut r);
+    }
+    let (w, h) = (r[2] - r[0], r[3] - r[1]);
+    let x = if left { area[0] } else { area[2] - w };
+    unsafe { MoveWindow(found.1, x, area[1], w, h, 1) };
+}
+
+// test on one PC: the host's game on the left loads the map; once its server is up, a second
+// game on the right connects to 127.0.0.1. The client starts only then: both games poll the same
+// join.txt, and the host's game stops polling once it hosts. The client gets the next shirt color.
+#[tauri::command]
+fn launch_test(map: String, loadout: bool) -> Result<(), String> {
+    let me = me();
+    let host = start_game(&me, loadout, Some(host_line(&map, &me, loadout)?))?;
+    std::thread::spawn(move || {
+        place_window(host, true);
+        for _ in 0..300 {
+            if server_up() {
+                let mut friend = me.clone();
+                friend["color"] = ((me["color"].as_u64().unwrap_or(1) + 1) % 10).into();
+                if let Ok(line) = connect_line("127.0.0.1", &friend) {
+                    if let Ok(pid) = start_game(&friend, loadout, Some(line)) {
+                        place_window(pid, false);
+                    }
+                }
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    });
     Ok(())
 }
 
@@ -146,7 +223,7 @@ fn running(exe: &str) -> bool {
 // wait for a Steam invite: the bridge writes join.txt when the player accepts it
 #[tauri::command]
 fn launch_steam() -> Result<(), String> {
-    start_game(&me(), false, None)
+    start_game(&me(), false, None).map(|_| ())
 }
 
 #[tauri::command]
@@ -177,7 +254,7 @@ fn lobby_leave(app: AppHandle) {
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            load_settings, save_settings, game_name, list_maps, launch_steam,
+            load_settings, save_settings, game_name, list_maps, launch_steam, launch_test,
             lobby_host, lobby_join, lobby_update, lobby_start, lobby_leave
         ])
         .setup(|app| {

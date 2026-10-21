@@ -7,13 +7,12 @@
 // The UI gets every state as the "lobby" event; {"t":"closed"} when the host is gone.
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream, UdpSocket};
+use std::net::{TcpListener, TcpStream};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 pub const PORT: u16 = 49002;
-const GAME_PORT: u16 = 49001;
 
 struct Lobby {
     host: bool,
@@ -192,7 +191,7 @@ pub fn start(app: AppHandle) -> Result<(), String> {
     std::thread::spawn(move || {
         for _ in 0..300 {
             std::thread::sleep(Duration::from_secs(1));
-            if UdpSocket::bind(("0.0.0.0", GAME_PORT)).is_err() {
+            if crate::server_up() {
                 if let Some(l) = LOBBY.lock().unwrap().as_mut() {
                     broadcast(&app, l, &json!({ "t": "go" }));
                 }
