@@ -42,6 +42,7 @@ Far Cry has no official co-op. The campaign already runs as a local server plus 
 | Lobby | in testing | player list with colors and loadouts; "Start" not yet tried with two games |
 | Join through Steam friends | in testing | bridge runs as Spacewar (AppID 480) |
 | Cutscenes | partly | the host sees them; joined players do not |
+| Paraglider | broken | reported 2026-10-21, not yet investigated |
 | Helicopters | host only | joined players see them hanging in place |
 | Saves | no | `coop_save` / `coop_load` keep a test checkpoint in server memory |
 
@@ -56,7 +57,7 @@ Requirements: Far Cry 1.4 (the Steam and GOG versions are 1.4), Windows 10 or 11
 3. Start `FarCryCoopLauncher.exe`.
 4. Host: choose a map, press "Host lobby". Friends: enter the host's IP, press "Join lobby". The host presses "Start".
 
-Friends on the internet need the host's IP with UDP 49001 (game) and TCP 49002 (lobby) open: port forwarding, or a virtual LAN such as Radmin VPN or ZeroTier. Full player instructions: [games/far-cry/release/INSTALL.md](games/far-cry/release/INSTALL.md).
+Three ways to invite friends: Steam friends list through the Spacewar bridge (no IP or ports), a virtual LAN (Radmin VPN, Hamachi, ZeroTier), or port forwarding of UDP 49001 (game) and TCP 49002 (lobby). Step by step, plus a beta test checklist: [games/far-cry/release/INSTALL.md](games/far-cry/release/INSTALL.md).
 
 Without the launcher: start `Bin32\FarCryCoop.bat`. The host types `#CoopMap("pier")` in the console (`~`), and friends type `connect <host IP>`.
 
@@ -119,6 +120,7 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 ## Known limitations
 
 - Helicopters (`Gunship`, `CargoChopper`) fly only for the host; joined players see them hanging at their start point.
+- The paraglider does not work in co-op yet.
 - A joined player cannot push barrels or crates.
 - Joined players do not see cutscenes; the host's intro cutscene is not verified on every map.
 - No real saves: a server restart starts the map over.

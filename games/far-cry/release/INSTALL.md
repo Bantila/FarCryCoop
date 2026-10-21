@@ -17,15 +17,44 @@ Play the Far Cry campaign together: one player hosts, friends join. Beta: expect
 - Lobby: the host chooses a map and presses "Host lobby". Friends enter the host's IP and press "Join lobby". Everyone sees the players with their shirt colors and loadouts. The host presses "Start": the game starts for everyone, and friends connect once the host's map is loaded.
 - Or press "Steam invite" and accept the host's invite in Steam.
 
-## Host
-1. Start the game with `FarCryCoop.bat`.
-2. Open the console with `~` and type, for example: `#CoopMap("pier")`
-   Maps: training, fort, pier, carrier, factory, research, treehouse, bunker, rebellion, steam, archive, control, swamp, catacombs, river, boat, dam, cooler, regulator, volcano.
-3. Friends on the internet need your IP and UDP port 49001 and TCP port 49002 (lobby) open (port forwarding, or a virtual LAN such as Radmin VPN or ZeroTier).
+## Inviting friends
 
-## Join
-1. Start the game with `FarCryCoop.bat`.
-2. Multiplayer, LAN: the host's game shows up. Or open the console (`~`) and type `connect <host IP>`.
+There are three ways. Pick one.
+
+### Way 1. Steam (Spacewar): no IP, no ports
+In Steam the mod shows up as Valve's free test game "Spacewar" (AppID 480). That gives the "Join Game" button, and Steam carries the traffic through its own servers. Nobody needs to buy or install Spacewar.
+1. Everyone runs Steam, and you are Steam friends.
+2. Host: in the launcher, choose a map, press "Host lobby", then "Start". Keep the "Far Cry co-op: Steam" window open. Once the map is loaded it shows `server up: friends can join`, and friends see you "playing Spacewar".
+3. Friend: in the launcher press "Steam invite". Wait for the game's main menu.
+4. Friend: in the Steam friends list, click the host → "Join Game". Or the host picks "Invite to game" in the Steam chat and the friend accepts.
+5. The friend's game connects by itself: the bridge prints `joining ...`, and a few seconds later the friend is on the map.
+
+Limits: this way shows no lobby with colors, but color and loadout still work. Sessions are accepted only from Steam friends, and only while the host runs a server.
+
+### Way 2. Radmin VPN, Hamachi or ZeroTier: a shared "LAN"
+1. Everyone installs the same program, for example Radmin VPN (free, no player limit).
+2. The host creates a network (name and password), friends join it.
+3. The host looks up their IP in that program (Radmin: `26.x.x.x`, Hamachi: `25.x.x.x`) and sends it to friends.
+4. Host: "Host lobby". Friends: enter that IP and press "Join lobby". Everyone sees the players with colors and loadouts.
+5. The host presses "Start". The game starts for everyone, and friends connect by themselves once the host's map is loaded.
+6. When Windows asks about the firewall for `FarCryCoopLauncher.exe` and `FarCry.exe`, allow access (private and public networks: VPN adapters are often public).
+
+### Way 3. Port forwarding on the router
+The host forwards UDP 49001 (game) and TCP 49002 (lobby) to their PC and gives friends their external IP. Then go on as in way 2, from step 4.
+
+### Without the launcher
+Host: start `Bin32\FarCryCoop.bat`, open the console with `~` and type, for example, `#CoopMap("pier")`.
+Maps: training, fort, pier, carrier, factory, research, treehouse, bunker, rebellion, steam, archive, control, swamp, catacombs, river, boat, dam, cooler, regulator, volcano.
+Friend: start `FarCryCoop.bat`, then Multiplayer → LAN, or in the console: `connect <host IP>`.
+
+## Beta test: what to check and what to send
+1. Your shirt color shows for the other player (you see yourself in first person only).
+2. With the loadout on: at the start and after death you get the Machete and your 4 weapons with full ammo.
+3. A weapon taken from an enemy carries over to the next level.
+4. Lobby: "Start" starts the game for everyone, and friends connect by themselves.
+5. Steam: "Join Game" connects without an IP.
+
+If something does not work, send `log.txt` from the Far Cry folder, the `netlog_*.txt` files from `Mods\FarCryCoop`, and the text of the "Far Cry co-op: Steam" window. You can test two games on one PC, but the lobby is unreliable there: both games read the same `join.txt`.
 
 ## Useful console commands (host)
 - `#CoopGod(1)` / `#CoopGod(0)` — god mode for everyone on/off

@@ -199,12 +199,28 @@ Lobby (`launcher/src/lobby.rs`): the host's launcher listens on TCP 49002, frien
 
 Toolchain: Rust (i686 host and target) in `E:\FarCryCoop\Data\rustup` and `Data\cargo`, linked with the MSVC in `D:\TailCore\toolchain\vs` and the x86 SDK libs in `Tools\winsdk-x86`. There are no x64 SDK libs, so the launcher is 32-bit. See [launcher/README.md](launcher/README.md).
 
+Owner's test (2026-10-21, two games on one PC):
+- The shirt stayed white even with the mask shader on. The player model is `p_model` = `objects/characters/pmodels/hero/hero.cgf`, which has no color mask; multiplayer uses `mp_model` = `hero_mp.cgf`. `PCOLOR` now loads `hero_mp.cgf` for every player except our own (seen in first person only). Not yet seen in game.
+- The client got the host's loadout. Both games on one PC read the same `prefs.lua`, so the last write won. Each game now gets its settings in its own console line (`#COOP_Color=.. COOP_Weapons=".." COOP_LoadoutMode=.. CoopMap("map")` for the host, `... Game:Connect("ip:49001",1)` for a client). `prefs.lua` is read only when the line set nothing (Steam invite). The lobby on one PC stays unreliable: both games poll the same `join.txt`, and the client's game may take the host's `CoopMap` line.
+- The paraglider (hang glider) does not work. Details still to collect.
+
+Security review after the push:
+- **Lobby writes:** they time out after 2 s, so a peer that stops reading cannot hang the lobby.
+- **"start":** acts once, and a client ignores "go" before "start".
+- **Addresses:** checked before they reach the game console.
+- **Steam bridge:** accepts a session only from a Steam friend (`HasFriend`, immediate) and only while a server runs on the PC.
+
+Crysis co-op ([SeniorStackOverflow/crysis-coop](https://github.com/SeniorStackOverflow/crysis-coop), CryEngine 2, found through the coop-anything Crysis page). It has no license (NOASSERTION), so only its ideas are used here, not its code.
+- **Joining:** a 6-digit join code per host, UDP hole punching, and a WebSocket relay fallback on one VPS on port 443. This makes play possible without Steam or a VPN, and is a candidate after the Spacewar bridge.
+- **Other features:** downed players can be revived, the whole team resets to the checkpoint when everyone is down, inventories are kept per player, and clients rejoin by themselves after the host reloads a level.
+
 ## Next steps
 
 1. Host mode: make the `coop_map` console command work in the game client; check the intro cutscene for the host; try other campaign maps.
 2. Verify checkpoints in game (Pier `saveTrigger56`, Training `saveTrigger3`).
 3. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks), enemies jerking on the client (the client moves them more often than the server does: extrapolation between updates); then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
 4. Real engine saves (option A of the saves recon), after the lightweight `coop_save`.
-5. Launcher / Steam P2P transport: postponed by the owner (2026-10-19). Weapon choice goes into the launcher too.
-6. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).
-7. After the optimizations: host admin panel (in-game, no console), mission select by any player, friendly fire, `coop_dmg`, RocketMod: see [PLAN-fun-mode.md](PLAN-fun-mode.md).
+5. Paraglider (hang glider) broken in co-op (owner, 2026-10-21): find out what fails (getting on, flying, landing, for host or client).
+6. Joining without Steam or a VPN: join code, UDP hole punching and a relay (crysis-coop idea above).
+7. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).
+8. After the optimizations: host admin panel (in-game, no console), mission select by any player, friendly fire, `coop_dmg`, RocketMod: see [PLAN-fun-mode.md](PLAN-fun-mode.md).
