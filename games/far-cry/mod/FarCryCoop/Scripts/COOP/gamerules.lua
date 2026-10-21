@@ -180,6 +180,32 @@ function CoopParagliders()
 	end
 end
 
+-- Level scripts move _localplayer (on the server: the host only) at a cutscene. Wrap exactly
+-- those Mission functions (level survey in NOTES) and bring the others to the host's spot right
+-- after them. A generic SetPos watch on the host fired at other moves too and put a client
+-- into a wall. The Mission table is new on every level, so the flag lives in it.
+COOP_CUTSCENE_MOVES = {"Event_Moveplayer", "Event_MoveplayerStartCutscene", "Event_MoveValForVaccine",
+	"Event_MoveplayerControlCenter", "Event_MoveplayerHackingComputer", "Event_MoveplayerOutpostCoords",
+	"Event_CutScene01", "Event_CutScene02", "moveplayercam"}
+function CoopWrapCutsceneMoves()
+	if (not Mission or Mission.COOP_MovesWrapped) then return; end
+	Mission.COOP_MovesWrapped = 1;
+	for i = 1, getn(COOP_CUTSCENE_MOVES) do
+		local name = COOP_CUTSCENE_MOVES[i];
+		local old = Mission[name];
+		if (old) then
+			Mission[name] = function(self, a, b)
+				local r = %old(self, a, b);
+				if (_localplayer) then
+					CoopGather(_localplayer);
+					CoopMonEvent("S", "gather after "..%name);
+				end
+				return r;
+			end
+		end
+	end
+end
+
 -- Checkpoints: GameEvent:OnTimer (Event_Save of a mission's save trigger) reads _localplayer, so
 -- on a dedicated server it failed and never set _LastCheckPPos: players respawned at the map
 -- start. Run it with the nearest living player as _localplayer; everyone respawns there.
@@ -448,6 +474,7 @@ function GameRules:OnUpdate(DeltaTime)
 	CoopWrapReleaseUser()
 	CoopSendVehOut()
 	call(CoopParagliders, {}, "x", function(msg) System:LogAlways("coop: paraglider error: "..tostring(msg)); end)
+	CoopWrapCutsceneMoves()
 	CoopBoatSeats()
 	call(CoopApplyLoadouts, {}, "x", function(msg) System:LogAlways("coop: loadout error: "..tostring(msg)); end)
 	call(CoopApplyPrefs, {}, "x", function(msg) System:LogAlways("coop: prefs error: "..tostring(msg)); end)
