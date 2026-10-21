@@ -9,8 +9,9 @@ COOP_UPDATE_RATE = 50
 Coop_DefaultClientOnInit = ClientStuff.OnInit;
 function ClientStuff:OnInit()
 	Coop_DefaultClientOnInit(self);
-	-- written by the launcher: COOP_Color, COOP_Weapons, COOP_LoadoutMode (used by the host only)
-	Script:LoadScript("Mods/FarCryCoop/prefs.lua");
+	-- written by the launcher: COOP_Color, COOP_Weapons, COOP_LoadoutMode (used by the host only).
+	-- The launcher's console line (join.txt) sets them first: two games on one PC share this file.
+	if (not COOP_Color) then Script:LoadScript("Mods/FarCryCoop/prefs.lua"); end
 	for name, def in WeaponClassesEx do
 		Game:AddWeapon(name);
 	end
@@ -126,6 +127,13 @@ ClientStuff.ServerCommandTable["PCOLOR"] = function(String, toktable)
 				entity:SetShaderFloat("ColorB", c[3], 0, 0);
 			end
 		end
+	end
+	-- the single-player Jack (p_model hero.cgf) has no color mask: everyone stayed white with the
+	-- shader on. Other players get the multiplayer Jack, the model multiplayer colors.
+	-- Our own player is seen from first person only, so it keeps its model.
+	if (e ~= _localplayer and not e.COOP_MPModel) then
+		e.COOP_MPModel = 1;
+		e:LoadCharacter("objects/characters/pmodels/hero/hero_mp.cgf", 0);
 	end
 	e.COOP_Color = c;
 	e.bUpdatePlayerEffectParams = 1;
