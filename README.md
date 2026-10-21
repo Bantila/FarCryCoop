@@ -38,7 +38,7 @@ Far Cry has no official co-op. The campaign already runs as a local server plus 
 | Russian keyboard layout | works | the game used to lose its key bindings with it |
 | Checkpoints and respawn | partly | the respawn point follows checkpoints; not seen in game on every map |
 | Shirt color | in testing | 10 colors from the launcher; the color mask shader is turned on by the mod |
-| Loadout | in testing | 4 of 10 weapons, chosen in the launcher; the host turns it on |
+| Loadout | in testing | 4 of 11 weapons, chosen in the launcher; the host turns it on |
 | Lobby | in testing | player list with colors and loadouts; "Start" not yet tried with two games |
 | Join through Steam friends | in testing | bridge runs as Spacewar (AppID 480) |
 | Cutscenes | partly | the host sees them; joined players do not |
@@ -65,7 +65,7 @@ Without the launcher: start `Bin32\FarCryCoop.bat`. The host types `#CoopMap("pi
 
 `FarCryCoopLauncher.exe` (Rust + Tauri, one window in the style of the game menu):
 
-- **Player:** name, shirt color (10 colors of the multiplayer palette), 4 of 10 weapons for the loadout (Falcon, MP5, P90, M4, AG36, OICW, Shotgun, SniperRifle, M249, RL); everyone also gets the Machete.
+- **Player:** name, shirt color (10 colors of the multiplayer palette), 4 of 11 weapons for the loadout (Machete, Falcon, MP5, P90, M4, AG36, OICW, Shotgun, SniperRifle, M249, RL).
 - **Lobby:** the host creates it, friends join by IP. Everyone sees the player list with shirt colors and loadouts, and the host's map and loadout mode.
 - **Start:** the game starts for everyone; the host's game loads the map, and friends connect once the host's server is up.
 - **Steam invite:** starts the game and waits for the host's invite from the Steam friends list.

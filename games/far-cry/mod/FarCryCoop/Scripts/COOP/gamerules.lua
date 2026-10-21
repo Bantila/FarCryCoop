@@ -351,9 +351,9 @@ end
 -- Launcher settings (prefs.lua, loaded by COOP ClientStuff): every client sends its shirt color
 -- and chosen weapons ("PREF", OnClientCmd). Once per spawned player entity (a respawn is a new
 -- entity): everyone paints it ("PCOLOR", COOP ClientStuff). With the host's COOP_LoadoutMode=1
--- it also gets the Machete plus its 4 weapons instead of the mission's, unless it carried
+-- it also gets its own 4 weapons instead of the mission's, unless it carried
 -- weapons over from the last level (CoopApplyLoadouts), and full ammo every spawn.
-COOP_LOADOUT_WEAPONS = {Falcon=1, MP5=1, P90=1, M4=1, AG36=1, OICW=1, Shotgun=1, SniperRifle=1, M249=1, RL=1}
+COOP_LOADOUT_WEAPONS = {Machete=1, Falcon=1, MP5=1, P90=1, M4=1, AG36=1, OICW=1, Shotgun=1, SniperRifle=1, M249=1, RL=1}
 if (not COOP_Prefs) then COOP_Prefs = {}; end -- per server slot id; kept through map loads
 
 function CoopSetPrefs(server_slot, tk)
@@ -394,13 +394,12 @@ function CoopApplyPrefs()
 							P.cnt:MakeWeaponAvailable(WeaponClassesEx[w.name].id, 0);
 						end
 					end
-					local give = {"Machete"};
-					for k = 1, getn(p.weapons) do give[k + 1] = p.weapons[k]; end
+					local give = p.weapons;
 					for k = 1, getn(give) do
 						Game:AddWeapon(give[k]);
 						P.cnt:MakeWeaponAvailable(WeaponClassesEx[give[k]].id, 1);
 					end
-					P.cnt:SetCurrWeapon(WeaponClassesEx[give[getn(give)]].id);
+					if (getn(give) > 0) then P.cnt:SetCurrWeapon(WeaponClassesEx[give[getn(give)]].id); end
 				end
 				CoopFillAmmo(P);
 			end

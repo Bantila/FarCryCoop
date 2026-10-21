@@ -111,7 +111,7 @@ const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 // MultiplayerUtils.ModelColor, index = p_color
 const COLORS = ['#000', '#fff', '#00f', '#0f0', '#f00', '#0ff', '#ff0', '#f0f', '#ff8000', '#808080'];
-const WEAPONS = ['Falcon', 'MP5', 'P90', 'M4', 'AG36', 'OICW', 'Shotgun', 'SniperRifle', 'M249', 'RL'];
+const WEAPONS = ['Machete', 'Falcon', 'MP5', 'P90', 'M4', 'AG36', 'OICW', 'Shotgun', 'SniperRifle', 'M249', 'RL'];
 const $ = id => document.getElementById(id);
 let s = { name: '', color: 1, weapons: [], loadout: false, map: '', ip: '' };
 let room = null; // last lobby state from the host
@@ -126,7 +126,7 @@ function renderMe() {
     b.onclick = () => { s.color = i; changed(); };
     return b;
   }));
-  $('count').textContent = `Оружие ${s.weapons.length}/4 + мачете / Weapons ${s.weapons.length}/4 + machete`;
+  $('count').textContent = `Оружие ${s.weapons.length}/4 / Weapons ${s.weapons.length}/4`;
   $('weapons').replaceChildren(...WEAPONS.map(w => {
     const l = document.createElement('label');
     const on = s.weapons.includes(w);

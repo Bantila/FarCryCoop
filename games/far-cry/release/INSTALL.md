@@ -13,7 +13,7 @@ Play the Far Cry campaign together: one player hosts, friends join. Beta: expect
 
 ## Launcher
 - Shirt color: pick one of 10 colors. Everyone sees it.
-- Loadout: pick 4 of 10 weapons; everyone also gets the Machete. Loadout only works when the host turns it on. With the loadout on, every spawn gives your 4 weapons with full ammo. Weapons you take from enemies carry over to the next level, and your ammo is refilled there.
+- Loadout: pick 4 of 11 weapons (the Machete is one of them). Loadout only works when the host turns it on. With the loadout on, every spawn gives your 4 weapons with full ammo. Weapons you take from enemies carry over to the next level, and your ammo is refilled there.
 - Lobby: the host chooses a map and presses "Host lobby". Friends enter the host's IP and press "Join lobby". Everyone sees the players with their shirt colors and loadouts. The host presses "Start": the game starts for everyone, and friends connect once the host's map is loaded.
 - Or press "Steam invite" and accept the host's invite in Steam.
 
@@ -49,7 +49,7 @@ Friend: start `FarCryCoop.bat`, then Multiplayer → LAN, or in the console: `co
 
 ## Beta test: what to check and what to send
 1. Your shirt color shows for the other player (you see yourself in first person only).
-2. With the loadout on: at the start and after death you get the Machete and your 4 weapons with full ammo.
+2. With the loadout on: at the start and after death you get your 4 weapons with full ammo.
 3. A weapon taken from an enemy carries over to the next level.
 4. Lobby: "Start" starts the game for everyone, and friends connect by themselves.
 5. Steam: "Join Game" connects without an IP.

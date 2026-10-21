@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::AppHandle;
 
-const WEAPONS: [&str; 10] = ["Falcon", "MP5", "P90", "M4", "AG36", "OICW", "Shotgun", "SniperRifle", "M249", "RL"];
+const WEAPONS: [&str; 11] = ["Machete", "Falcon", "MP5", "P90", "M4", "AG36", "OICW", "Shotgun", "SniperRifle", "M249", "RL"];
 
 fn exe_dir() -> PathBuf {
     std::env::current_exe().unwrap().parent().unwrap().to_path_buf()
