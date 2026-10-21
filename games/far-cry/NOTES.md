@@ -179,6 +179,26 @@ Host mode: the host plays in the normal game (`FarCry.exe`) and friends join it.
 
 Fix 11 (ASI): CryInput builds its key table (scan code -> character, plain/Shift/Ctrl/AltGr; `0x33509c40`, called from keyboard init `0x3350a140`) with `MapVirtualKeyExA` + `ToAsciiEx` on `GetKeyboardLayout(0)`. With the Russian layout the letter keys became Cyrillic: the bindings read from `game.cfg` at startup were dropped (empty key settings) and the console took no Latin. The ASI hooks `user32!GetKeyboardLayout` first thing in its worker thread, before CrySystem loads CryInput, and returns the US layout (`LoadKeyboardLayoutA("00000409", KLF_NOTELLSHELL)`: loaded, not activated, so Windows keeps the player's layout). Patching CryInput's import after it had initialised was too late: the bindings were already gone. Verified: walking, crouching and the key settings work with the Russian layout.
 
+## Spike 10 — launcher, shirt color and loadout (2026-10-21)
+
+`launcher/` is a Tauri 2 app (Rust + one HTML page): `FarCryCoopLauncher.exe` in the game folder, next to `Bin32`, not in it: Windows loads DLLs from the exe folder first, and the old `version.dll` and `dbghelp.dll` in `Bin32` crashed it (access violation at address 0). It runs a lobby (below) or waits for a Steam invite. It also sets the player name, shirt color and loadout. It talks to the game only through files the mod already reads:
+- `Mods\FarCryCoop\prefs.lua` (ASCII, no BOM): `COOP_Color` (0..9, `MultiplayerUtils.ModelColor`), `COOP_Weapons` (up to 4 of Falcon, MP5, P90, M4, AG36, OICW, Shotgun, SniperRifle, M249, RL), `COOP_LoadoutMode` (only the host's value counts). COOP `ClientStuff:OnInit` loads it.
+- `Mods\FarCryCoop\join.txt`: one console line run by the ASI. The host gets `#CoopMap("<map>")`, a join by IP gets `connect <ip>`. The Steam bridge writes the same file on an invite.
+
+In game:
+- In `OnSetPlayer` each client sends `PREF <color> <weapons>`. `GameRules:OnClientCmd` keeps the values per server slot (`COOP_Prefs`).
+- Once a second, `CoopApplyPrefs` handles every live player entity it has not handled yet. A respawn is a new entity, so each spawn is handled once.
+- The server broadcasts `PCOLOR <id> <color>`. Every player stayed white because the single-player rules never turn on the color mask shader: multiplayer does that with the `"FX"` command (`BasicPlayer.SecondShader_TeamColoring`, effect 2, shader `PlayerMaskModulate`). The shader takes `ColorR/G/B` from `entity.cnt:GetColor()`, which the single-player spawn leaves white and Lua cannot set. So `PCOLOR` stores the color in `entity.COOP_Color`, turns the effect on, and a wrapped `BasicPlayer.UpdatePlayerEffectParams` sets the launcher color after the original. The first try only set the shader floats: the log showed `PCOLOR` arriving on both sides, but nothing changed on screen.
+- With `COOP_LoadoutMode=1`, the mission's starting weapons are replaced by the Machete and the 4 chosen weapons. Weapons carried over from the last level (`CoopApplyLoadouts`, which sets `COOP_Carried`) are kept. Ammo is filled to `MaxAmmo` on every spawn.
+- Not yet seen in game:
+  - the color with the mask shader on the single-player Jack model (the `*_mp.cgf` models have the mask);
+  - whether `Script:LoadScript("Mods/FarCryCoop/prefs.lua")` finds a loose file next to the pak;
+  - whether the host's `Client:SendCommand` reaches `OnClientCmd` over loopback.
+
+Lobby (`launcher/src/lobby.rs`): the host's launcher listens on TCP 49002, friends' launchers connect by IP. One JSON object per line. Clients send their name, color and weapons. The host checks them (name up to 24 characters, color 0..9, only the 10 weapons) and sends the player list, map and loadout mode to everyone after each change. "Start": everyone's launcher starts the game, and the host's game gets `#CoopMap`. The host's launcher then tries to bind UDP 49001 once a second; when it cannot, the server is up and it sends "go". The clients' launchers then write `connect <host ip>` into `join.txt`. Checked with two launchers on one PC: join, a color change shows up on the host, leaving drops the player from the list. A name with `<b>` shows as text. Not yet tried: "Start" with two games. The host needs TCP 49002 open as well as UDP 49001. The UI uses the colors of the game menu (`UISystemCfg.lua`: `181 246 188` focus, `47 66 53` border).
+
+Toolchain: Rust (i686 host and target) in `E:\FarCryCoop\Data\rustup` and `Data\cargo`, linked with the MSVC in `D:\TailCore\toolchain\vs` and the x86 SDK libs in `Tools\winsdk-x86`. There are no x64 SDK libs, so the launcher is 32-bit. See [launcher/README.md](launcher/README.md).
+
 ## Next steps
 
 1. Host mode: make the `coop_map` console command work in the game client; check the intro cutscene for the host; try other campaign maps.

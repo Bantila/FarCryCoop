@@ -16,8 +16,21 @@ if ($LASTEXITCODE) { throw 'ASI build failed' }
 Copy-Item 'E:\FarCryCoop\Temp\asi\FarCryCoopNet.asi' "$stage\Bin32"
 Copy-Item 'E:\FarCryCoop\Tools\ultimate-asi-loader-9.7.4\dinput8.dll' "$stage\Bin32"
 Copy-Item 'E:\FarCryCoop\Downloads\ultimate-asi-loader-9.7.4\LICENSE.txt' "$stage\Bin32\UltimateASILoader-LICENSE.txt"
+# Steam bridge: runs as Spacewar (AppID 480, steam_appid.txt in its working folder); steam_api.dll
+# x86 from the Steamworks SDK (Valve-signed copy in Downloads\steamworks)
+& "$far\steam\build.ps1"
+if ($LASTEXITCODE) { throw 'Steam bridge build failed' }
+$steam = "$stage\Mods\FarCryCoop\Steam"
+New-Item -ItemType Directory -Force $steam | Out-Null
+Copy-Item 'E:\FarCryCoop\Temp\steam\FarCryCoopSteam.exe', 'E:\FarCryCoop\Downloads\steamworks\steam_api.dll' $steam
+Set-Content "$steam\steam_appid.txt" -Encoding ascii -NoNewline '480'
 Set-Content "$stage\Bin32\FarCryCoop.bat" -Encoding ascii @(
-  '@echo off', 'cd /d "%~dp0"', 'start "" FarCry.exe -DEVMODE -MOD:FarCryCoop')
+  '@echo off', 'cd /d "%~dp0"',
+  'start "Far Cry co-op: Steam" /D "..\Mods\FarCryCoop\Steam" FarCryCoopSteam.exe',
+  'start "" FarCry.exe -DEVMODE -MOD:FarCryCoop')
+& "$far\launcher\build.ps1"
+if ($LASTEXITCODE) { throw 'Launcher build failed' }
+Copy-Item 'E:\FarCryCoop\Temp\launcher\FarCryCoopLauncher.exe' $stage # not Bin32: its version.dll crashes it
 Copy-Item "$PSScriptRoot\INSTALL.md", "$PSScriptRoot\INSTALL.ru.md" $stage
 
 $zip = Join-Path $Out "FarCryCoop-$Version.zip"
