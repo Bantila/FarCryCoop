@@ -42,7 +42,7 @@ Far Cry has no official co-op. The campaign already runs as a local server plus 
 | Lobby | in testing | player list with colors and loadouts; "Start" not yet tried with two games |
 | Join through Steam friends | in testing | bridge runs as Spacewar (AppID 480) |
 | Cutscenes | partly | the host sees them; joined players do not |
-| Paraglider | broken | reported 2026-10-21, not yet investigated |
+| Paraglider | in testing | one per level: a copy now appears for each next player |
 | Helicopters | host only | joined players see them hanging in place |
 | Saves | no | `coop_save` / `coop_load` keep a test checkpoint in server memory |
 
@@ -120,7 +120,6 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 ## Known limitations
 
 - Helicopters (`Gunship`, `CargoChopper`) fly only for the host; joined players see them hanging at their start point.
-- The paraglider does not work in co-op yet.
 - A joined player cannot push barrels or crates.
 - Joined players do not see cutscenes; the host's intro cutscene is not verified on every map.
 - No real saves: a server restart starts the map over.

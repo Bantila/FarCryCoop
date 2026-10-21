@@ -135,12 +135,37 @@ function CoopSendVehOut()
 		local p = System:GetEntity(o.p);
 		if (p and not (p.theVehicle and p.theVehicle.id == o.v)) then
 			Server:BroadcastCommand("VEHOUT "..o.v.." "..o.p);
-			-- the level has one paraglider: whoever lands with it brings the others along
-			local v = System:GetEntity(o.v);
-			if (v and v.classname == "Paraglider" and BasicPlayer.IsAlive(p)) then CoopGather(p); end
 		end
 	end
 	COOP_VehOut = {};
+end
+
+-- A level has one paraglider with one seat: the first player to reach it flew, the others had
+-- nothing to fly. Once a paraglider is taken and none is left free, spawn another one where the
+-- taken one stood (remembered while it was free), up to one per player. The level's own glider
+-- keeps its mission events (DriverIn); the copies are only for getting down.
+-- ponytail: one shared start spot per level, copies are never removed
+function CoopParagliders()
+	local free, total, taken = 0, 0, nil;
+	for i, e in System:GetEntities() do
+		if (e.classname == "Paraglider" and e.driverT) then
+			total = total + 1;
+			if (e.driverT.entity) then
+				if (e.COOP_Start) then taken = e; end
+			else
+				free = free + 1;
+				if (not e.COOP_Start) then e.COOP_Start = {pos = new(e:GetPos()), ang = new(e:GetAngles())}; end
+			end
+		end
+	end
+	if (not taken or free > 0 or total >= getn(CoopPlayers())) then return; end
+	local g = Server:SpawnEntity("Paraglider");
+	if (not g) then System:LogAlways("coop: could not spawn a paraglider"); return; end
+	g:SetPos(taken.COOP_Start.pos);
+	g:SetAngles(taken.COOP_Start.ang);
+	g:EnableSave(0);
+	g.COOP_Start = taken.COOP_Start;
+	CoopMonEvent("S", "paraglider copy "..g:GetName().." for player "..(total + 1));
 end
 
 -- Checkpoints: GameEvent:OnTimer (Event_Save of a mission's save trigger) reads _localplayer, so
@@ -411,6 +436,7 @@ function GameRules:OnUpdate(DeltaTime)
 	CoopWrapHud()
 	CoopWrapReleaseUser()
 	CoopSendVehOut()
+	call(CoopParagliders, {}, "x", function(msg) System:LogAlways("coop: paraglider error: "..tostring(msg)); end)
 	CoopBoatSeats()
 	call(CoopApplyLoadouts, {}, "x", function(msg) System:LogAlways("coop: loadout error: "..tostring(msg)); end)
 	call(CoopApplyPrefs, {}, "x", function(msg) System:LogAlways("coop: prefs error: "..tostring(msg)); end)

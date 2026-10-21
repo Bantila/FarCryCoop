@@ -202,7 +202,7 @@ Toolchain: Rust (i686 host and target) in `E:\FarCryCoop\Data\rustup` and `Data\
 Owner's test (2026-10-21, two games on one PC):
 - The shirt stayed white even with the mask shader on. The player model is `p_model` = `objects/characters/pmodels/hero/hero.cgf`, which has no color mask; multiplayer uses `mp_model` = `hero_mp.cgf`. `PCOLOR` now loads `hero_mp.cgf` for every player except our own (seen in first person only). Not yet seen in game.
 - The client got the host's loadout. Both games on one PC read the same `prefs.lua`, so the last write won. Each game now gets its settings in its own console line (`#COOP_Color=.. COOP_Weapons=".." COOP_LoadoutMode=.. CoopMap("map")` for the host, `... Game:Connect("ip:49001",1)` for a client). `prefs.lua` is read only when the line set nothing (Steam invite). The lobby on one PC stays unreliable: both games poll the same `join.txt`, and the client's game may take the host's `CoopMap` line.
-- The paraglider (hang glider) does not work. Details still to collect.
+- The paraglider (hang glider): the owner reports that whoever reaches it first flies, and the others cannot get on. Cause: a level has one `Paraglider` entity with one seat (`driverT`, `passengerLimit = 0`). Until now a landing pulled the others to the pilot (`CoopGather` in `CoopSendVehOut`). Fix: `CoopParagliders` checks once a second. When every paraglider is taken, it spawns a new one (`Server:SpawnEntity("Paraglider")`) on the taken one's start spot, remembered while it was free, up to one per player. Seats are per instance (`VC:InitSeats` copies `driverT`), and the vehicle sets its own net presence, so clients get the copy. The landing gather is removed. Not yet seen in game.
 
 Security review after the push:
 - **Lobby writes:** they time out after 2 s, so a peer that stops reading cannot hang the lobby.
@@ -220,7 +220,7 @@ Crysis co-op ([SeniorStackOverflow/crysis-coop](https://github.com/SeniorStackOv
 2. Verify checkpoints in game (Pier `saveTrigger56`, Training `saveTrigger3`).
 3. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks), enemies jerking on the client (the client moves them more often than the server does: extrapolation between updates); then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
 4. Real engine saves (option A of the saves recon), after the lightweight `coop_save`.
-5. Paraglider (hang glider) broken in co-op (owner, 2026-10-21): find out what fails (getting on, flying, landing, for host or client).
+5. Paraglider: check the copies in game (Pier, two players).
 6. Joining without Steam or a VPN: join code, UDP hole punching and a relay (crysis-coop idea above).
 7. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).
 8. After the optimizations: host admin panel (in-game, no console), mission select by any player, friendly fire, `coop_dmg`, RocketMod: see [PLAN-fun-mode.md](PLAN-fun-mode.md).
