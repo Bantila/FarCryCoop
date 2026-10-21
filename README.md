@@ -175,7 +175,7 @@ docs/                            workspace and tool setup
 - Official CryENGINE MOD SDK 1.4 (source of `CryGame.dll`, used to check addresses). The leaked full engine source is not used.
 - [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader) (MIT) loads the plugin.
 
-Far Cry is a trademark of Crytek / Ubisoft. This is a fan project, not affiliated with them. You need your own copy of the game.
+License: [MIT](LICENSE). Far Cry is a trademark of Crytek / Ubisoft. This is a fan project, not affiliated with them. You need your own copy of the game.
 
 ## Other games of the series
 
