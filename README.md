@@ -37,12 +37,12 @@ Far Cry has no official co-op. The campaign already runs as a local server plus 
 | Barrels and crates moved on the server | works | moved by explosions; a player cannot push them |
 | Russian keyboard layout | works | the game used to lose its key bindings with it |
 | Checkpoints and respawn | partly | the respawn point follows checkpoints; not seen in game on every map |
-| Shirt color | in testing | 10 colors from the launcher; the color mask shader is turned on by the mod |
+| Shirt color | works | 10 colors from the launcher; other players use the multiplayer Jack model, which has the color mask |
 | Loadout | in testing | 4 of 11 weapons, chosen in the launcher; the host turns it on |
 | Lobby | in testing | player list with colors and loadouts; "Start" not yet tried with two games |
 | Join through Steam friends | in testing | bridge runs as Spacewar (AppID 480) |
 | Cutscenes | partly | the host sees them; joined players do not |
-| Paraglider | in testing | one per level: a copy now appears for each next player |
+| Paraglider | works | a copy appears for each next player; to others a climbing glider looks as if it falls |
 | Helicopters | host only | joined players see them hanging in place |
 | Saves | no | `coop_save` / `coop_load` keep a test checkpoint in server memory |
 
@@ -121,6 +121,7 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 ## Known limitations
 
 - Helicopters (`Gunship`, `CargoChopper`) fly only for the host; joined players see them hanging at their start point.
+- To the other players a paraglider that climbs looks as if it falls.
 - A joined player cannot push barrels or crates.
 - Joined players do not see cutscenes; the host's intro cutscene is not verified on every map.
 - No real saves: a server restart starts the map over.
