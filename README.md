@@ -1,23 +1,186 @@
-# FarCryCoop
+# FarCryCoop — campaign co-op for Far Cry (2004)
 
-**EN:** Co-op research and mods for the Far Cry series, following the
-[coop-anything](https://github.com/cranebeaker/coop-anything) playbook. Active work: **Far Cry 6**
-(co-op for more than 2 players). Other games are placeholders.
+Русская версия: [README.ru.md](README.ru.md)
 
-**RU:** Исследование и кооп-моды для серии Far Cry по методике
-[coop-anything](https://github.com/cranebeaker/coop-anything). Активная работа: **Far Cry 6**
-(кооп больше чем на 2 игроков). Остальные игры — заготовки.
+Play the original Far Cry campaign together: one player hosts a campaign map, friends join it and play the missions side by side. It is a mod: a script pack in `Mods\FarCryCoop`, a small ASI plugin that fixes the engine's networking for campaign maps, and a launcher with a lobby. No game files are replaced.
 
-| Game / Игра | Notes (EN) | Заметки (RU) | Status / Статус |
-|---|---|---|---|
-| Far Cry 6 | [NOTES.md](games/far-cry-6/NOTES.md) | [NOTES.ru.md](games/far-cry-6/NOTES.ru.md) | active / в работе |
-| Far Cry (2004) | [NOTES.md](games/far-cry/NOTES.md) | [NOTES.ru.md](games/far-cry/NOTES.ru.md) | placeholder / заготовка |
-| Far Cry 2 | [NOTES.md](games/far-cry-2/NOTES.md) | [NOTES.ru.md](games/far-cry-2/NOTES.ru.md) | placeholder / заготовка |
-| Far Cry 3 | [NOTES.md](games/far-cry-3/NOTES.md) | [NOTES.ru.md](games/far-cry-3/NOTES.ru.md) | placeholder / заготовка |
-| Far Cry 3: Blood Dragon | [NOTES.md](games/far-cry-3-blood-dragon/NOTES.md) | [NOTES.ru.md](games/far-cry-3-blood-dragon/NOTES.ru.md) | placeholder / заготовка |
-| Far Cry 4 | [NOTES.md](games/far-cry-4/NOTES.md) | [NOTES.ru.md](games/far-cry-4/NOTES.ru.md) | placeholder / заготовка |
-| Far Cry 5 | [NOTES.md](games/far-cry-5/NOTES.md) | [NOTES.ru.md](games/far-cry-5/NOTES.ru.md) | placeholder / заготовка |
-| Far Cry New Dawn | [NOTES.md](games/far-cry-new-dawn/NOTES.md) | [NOTES.ru.md](games/far-cry-new-dawn/NOTES.ru.md) | placeholder / заготовка |
-| Far Cry Primal | [NOTES.md](games/far-cry-primal/NOTES.md) | [NOTES.ru.md](games/far-cry-primal/NOTES.ru.md) | placeholder / заготовка |
+**Status: 0.2 beta, in active development** (branch `game/far-cry`, started 2026-10-18). Tested with 2 players on Far Cry 1.4 (Steam). Target: up to 4 players. Expect bugs.
 
-Workspace / Рабочая папка: [docs/workspace.md](docs/workspace.md) · [docs/workspace.ru.md](docs/workspace.ru.md)
+## Contents
+
+- [What works](#what-works)
+- [Quick start](#quick-start)
+- [Launcher and lobby](#launcher-and-lobby)
+- [Host console commands](#host-console-commands)
+- [How it works](#how-it-works)
+- [Known limitations](#known-limitations)
+- [Roadmap](#roadmap)
+- [Building from source](#building-from-source)
+- [Repository layout](#repository-layout)
+- [Prior art and credits](#prior-art-and-credits)
+- [Other games of the series](#other-games-of-the-series)
+
+## What works
+
+Far Cry has no official co-op. The campaign already runs as a local server plus a local client, and the mod builds on that: the host runs a campaign map as a network server with the single-player rules, and other players join as remote clients.
+
+| Area | State | Notes |
+|---|---|---|
+| Campaign map as a server | works | in the game client (host plays, "listen server") or on `FarCry_WinSV.exe` (dedicated) |
+| Remote players: movement, weapons, firing | works | the engine lost ~40% of every snapshot on campaign maps; the ASI fixes it |
+| Hits on enemies by remote players | works | client-side hits (`CHIT`), applied by the server |
+| Enemy AI, melee | works | sleeping AI wake near players; melee works on a dedicated server |
+| Area triggers for remote players | works | missions that advance on "reach this place" |
+| Map change and restart | works | friends stay connected |
+| Mission objectives and messages | works | forwarded from the server to every player |
+| Leaving vehicles and the paraglider | works | the server tells the client to let go |
+| Barrels and crates moved on the server | works | moved by explosions; a player cannot push them |
+| Russian keyboard layout | works | the game used to lose its key bindings with it |
+| Checkpoints and respawn | partly | the respawn point follows checkpoints; not seen in game on every map |
+| Shirt color | in testing | 10 colors from the launcher; the color mask shader is turned on by the mod |
+| Loadout | in testing | 4 of 10 weapons, chosen in the launcher; the host turns it on |
+| Lobby | in testing | player list with colors and loadouts; "Start" not yet tried with two games |
+| Join through Steam friends | in testing | bridge runs as Spacewar (AppID 480) |
+| Cutscenes | partly | the host sees them; joined players do not |
+| Helicopters | host only | joined players see them hanging in place |
+| Saves | no | `coop_save` / `coop_load` keep a test checkpoint in server memory |
+
+The full research log with every fix, address and test is in [games/far-cry/NOTES.md](games/far-cry/NOTES.md).
+
+## Quick start
+
+Requirements: Far Cry 1.4 (the Steam and GOG versions are 1.4), Windows 10 or 11. Everyone needs the same mod version.
+
+1. Get the player archive `FarCryCoop-<version>.zip` from the project owner, or build it (see [Building from source](#building-from-source)).
+2. Copy `Mods`, `Bin32` and `FarCryCoopLauncher.exe` into the Far Cry folder (Steam: `steamapps\common\FarCry`). Allow merging. If your `Bin32` already has an ASI loader (`version.dll` from a widescreen fix), do not copy `dinput8.dll`.
+3. Start `FarCryCoopLauncher.exe`.
+4. Host: choose a map, press "Host lobby". Friends: enter the host's IP, press "Join lobby". The host presses "Start".
+
+Friends on the internet need the host's IP with UDP 49001 (game) and TCP 49002 (lobby) open: port forwarding, or a virtual LAN such as Radmin VPN or ZeroTier. Full player instructions: [games/far-cry/release/INSTALL.md](games/far-cry/release/INSTALL.md).
+
+Without the launcher: start `Bin32\FarCryCoop.bat`. The host types `#CoopMap("pier")` in the console (`~`), and friends type `connect <host IP>`.
+
+## Launcher and lobby
+
+`FarCryCoopLauncher.exe` (Rust + Tauri, one window in the style of the game menu):
+
+- **Player:** name, shirt color (10 colors of the multiplayer palette), 4 of 10 weapons for the loadout (Falcon, MP5, P90, M4, AG36, OICW, Shotgun, SniperRifle, M249, RL); everyone also gets the Machete.
+- **Lobby:** the host creates it, friends join by IP. Everyone sees the player list with shirt colors and loadouts, and the host's map and loadout mode.
+- **Start:** the game starts for everyone; the host's game loads the map, and friends connect once the host's server is up.
+- **Steam invite:** starts the game and waits for the host's invite from the Steam friends list.
+- **Loadout on:** every spawn gives your 4 weapons with full ammo. Weapons taken from enemies carry over to the next level, with the ammo refilled.
+
+The launcher talks to the game only through two files: `Mods\FarCryCoop\prefs.lua` (color, weapons, loadout mode) and `Mods\FarCryCoop\join.txt` (one console line run by the ASI). Details: [games/far-cry/launcher/README.md](games/far-cry/launcher/README.md).
+
+## Host console commands
+
+Type them in the console (`~`) as `#Function()`; the short form (`coop_god 1`) works only on the dedicated server for now.
+
+| Command | What it does |
+|---|---|
+| `#CoopMap("pier")` | host a campaign map; again later: change the map, friends stay |
+| `#CoopMap(COOP_Map)` | restart the current map |
+| `#CoopGod(1)` / `#CoopGod(0)` | god mode for everyone |
+| `#CoopAmmo()` / `#CoopWeapons()` | full ammo / every weapon for everyone |
+| `#CoopGoto()` / `#CoopGoto(3)` | list checkpoints / move everyone to checkpoint 3 |
+| `#CoopGather()` | move everyone to the host |
+| `#CoopNoclip(1)` | fly mode for everyone |
+| `#CoopBot()` | spawn a teammate bot that follows the nearest player |
+| `#CoopSave()` / `#CoopLoad()` | test checkpoint in server memory |
+| `#CoopMonitorSet(1)` | log the state of players, AI and vehicles once a second (debugging) |
+
+## How it works
+
+```
+ FarCryCoopLauncher.exe ──TCP 49002── other launchers (lobby)
+        │ prefs.lua, join.txt
+        ▼
+ FarCry.exe -DEVMODE -MOD:FarCryCoop
+  ├─ Mods\FarCryCoop\FarCryCoop.pak   Lua: game type COOP = single-player rules + co-op fixes
+  └─ Bin32\FarCryCoopNet.asi          C: hooks in CryGame.dll 1.4 by address
+        │ UDP 49001 (the game's own network code)
+        ▼
+ friends' FarCry.exe
+```
+
+- **Game type `COOP`** (Lua, `Scripts/COOP/`): the single-player rules, plus the parts a network game is missing there. AI wake-up near any player, AI melee without animation events, checkpoints for every player, mission objectives and movie sequences forwarded to clients, client-side hits, vehicle exit relay, shirt color and loadout.
+- **ASI plugin** (`asi/FarCryCoopNet.c`, built without the CRT or Windows SDK). It hooks the original `CryGame.dll` 1.4 by address, with addresses found with REA/Ghidra and checked against the official MOD SDK 1.4 source:
+  - **Snapshots:** each snapshot goes out by priority and stays within the 8992-bit stream limit, so campaign maps (~650 net entities) reach the client.
+  - **Area triggers** for remote players.
+  - **Dedicated server:** cutscene and sound callbacks no longer crash it, and 1 ms timer resolution gives 35 snapshots a second.
+  - **Props** that move on the server are sent to clients.
+  - **Keyboard:** US layout for the game's key table.
+  - **Console:** one console line from `join.txt` runs on the main thread.
+- **Steam bridge** (`steam/FarCryCoopSteam.c`): runs as Spacewar, shows "Join" in the Steam friends list and relays the connection through `127.0.0.1:49011`.
+- **Launcher** (`launcher/`): Rust + Tauri 2, one HTML page, lobby over TCP.
+
+The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK was tried and rejected: it needs VC 7.1 with STLport, and gave nothing the ASI does not.
+
+## Known limitations
+
+- Helicopters (`Gunship`, `CargoChopper`) fly only for the host; joined players see them hanging at their start point.
+- A joined player cannot push barrels or crates.
+- Joined players do not see cutscenes; the host's intro cutscene is not verified on every map.
+- No real saves: a server restart starts the map over.
+- AI jumps and other animation-driven AI actions do not happen on a dedicated server; enemies may move in small jerks for joined players.
+- In-game chat and console type Latin letters only.
+- The short console commands (`coop_map pier`) do nothing in the game client; use the `#...` forms.
+- PunkBuster stays off; the mod never touches it.
+
+## Roadmap
+
+1. Verify checkpoints, shirt color, loadout and the lobby "Start" in game with two players.
+2. Steam join with a friend's real second account.
+3. Host admin panel inside the game (ESC menu instead of the console), any player able to start a mission, friendly fire switch: [games/far-cry/PLAN-fun-mode.md](games/far-cry/PLAN-fun-mode.md).
+4. Smoother enemies for joined players; AI jumps on a dedicated server.
+5. Real engine saves on a listen-server host.
+6. Player list during the game in the launcher.
+
+## Building from source
+
+Every script loads `E:\FarCryCoop\env.ps1` and works inside `E:\FarCryCoop` (see [docs/workspace.md](docs/workspace.md)). Tools: MSVC 14.44 (x86, read-only copy), x86 Windows SDK libs, Rust (i686) for the launcher.
+
+| Part | Command | Output |
+|---|---|---|
+| Mod scripts | `& games\far-cry\mod\deploy.ps1` | `<game>\Mods\FarCryCoop\FarCryCoop.pak` |
+| ASI plugin | `& games\far-cry\asi\build.ps1` | `Temp\asi\FarCryCoopNet.asi` |
+| Steam bridge | `& games\far-cry\steam\build.ps1` | `Temp\steam\FarCryCoopSteam.exe` |
+| Launcher | `& games\far-cry\launcher\build.ps1` | `Temp\launcher\FarCryCoopLauncher.exe` |
+| Player archive | `& games\far-cry\release\release.ps1` | `Temp\release\FarCryCoop-<version>.zip` |
+
+## Repository layout
+
+```
+games/far-cry/
+  NOTES.md, NOTES.ru.md          research log: every spike, fix and address
+  PLAN-fun-mode.md               planned host panel and fun features
+  mod/FarCryCoop/Scripts/        Lua: COOP rules, client side, monitor, host commands
+  mod/deploy.ps1                 packs the scripts into FarCryCoop.pak
+  asi/                           FarCryCoopNet.asi (C) and its build script
+  steam/                         Steam join bridge (C)
+  launcher/                      launcher with lobby (Rust + Tauri)
+  release/                       player archive script and INSTALL notes
+games/far-cry-*/                 notes for the other games of the series
+docs/                            workspace and tool setup
+```
+
+## Prior art and credits
+
+- [Assault Coop](https://www.moddb.com/mods/assault-coop) by FlameKnight7 (2011): 7 re-edited campaign maps for co-op. It showed the client relay idea for area triggers. Its scripts may not be reused without permission, so none of its code is here.
+- [FCAV](https://farcry1.itch.io/far-cry-advanced-version): announced co-op, not released.
+- Method: the [coop-anything](https://github.com/cranebeaker/coop-anything) playbook.
+- README structure inspired by co-op projects such as [TES3MP](https://github.com/TES3MP/TES3MP) and [sm64coopdx](https://github.com/coop-deluxe/sm64coopdx).
+- Official CryENGINE MOD SDK 1.4 (source of `CryGame.dll`, used to check addresses). The leaked full engine source is not used.
+- [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader) (MIT) loads the plugin.
+
+Far Cry is a trademark of Crytek / Ubisoft. This is a fan project, not affiliated with them. You need your own copy of the game.
+
+## Other games of the series
+
+| Game | Notes | Status |
+|---|---|---|
+| Far Cry (2004) | [NOTES.md](games/far-cry/NOTES.md) | **0.2 beta** (this branch) |
+| Far Cry 6 | [NOTES.md](games/far-cry-6/NOTES.md) | research |
+| Far Cry 2, 3, Blood Dragon, 4, 5, New Dawn, Primal | `games/far-cry-*/NOTES.md` | placeholders |
+
+Workspace: [docs/workspace.md](docs/workspace.md)
