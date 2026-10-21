@@ -12,7 +12,7 @@ $imports = [ordered]@{
   kernel32 = [ordered]@{ GetModuleHandleA = 4; GetModuleFileNameA = 12; VirtualAlloc = 16; VirtualProtect = 16
     FlushInstructionCache = 12; GetCurrentProcess = 0; GetCurrentProcessId = 0; CreateThread = 24; Sleep = 4
     CreateFileA = 28; WriteFile = 20; GetTickCount = 0; DisableThreadLibraryCalls = 4; lstrcmpiA = 8 }
-  user32 = [ordered]@{ wvsprintfA = 12 }
+  user32 = [ordered]@{ wvsprintfA = 12; LoadKeyboardLayoutA = 8; GetKeyboardLayout = 4 }
   winmm = [ordered]@{ timeBeginPeriod = 4 }
 }
 # An import library is a by-product of linking a stub DLL with the same stdcall exports:

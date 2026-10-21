@@ -15,6 +15,9 @@ function ClientStuff:OnInit()
 	-- A snapshot holds only 8992 bits and a campaign map has hundreds of entities: ask for more
 	-- snapshots than the default 20 a second (the server caps it at sv_maxupdaterate, 50)
 	if (Client and Client.SetUpdateRate) then Client:SetUpdateRate(COOP_UPDATE_RATE); end
+	-- A listen host plays the level intro as in single player: Mission:OnMapChange plays it only
+	-- when g_MapChanged is set, which single player's ClientStuff:OnMapChange does on a map change
+	if (Game:IsServer()) then g_MapChanged = 1; end
 	CoopMonEvent("C", "map");
 end
 
@@ -103,7 +106,8 @@ end
 
 -- sequences forwarded by the server (see COOP gamerules); names may contain spaces ("HIDE ALL").
 -- Cutscene-flagged sequences stay off like on the server (mov_NoCutscenes).
-setglobal("mov_NoCutscenes", 1);
+-- A listen host plays them (COOP gamerules switch them back on for it).
+if (not Game:IsServer()) then setglobal("mov_NoCutscenes", 1); end
 ClientStuff.ServerCommandTable["SEQ"] = function(String, toktable)
 	CoopMonEvent("C", "sequence "..strsub(String, 5));
 	if (not Game:IsServer()) then Movie:PlaySequence(strsub(String, 5)); end

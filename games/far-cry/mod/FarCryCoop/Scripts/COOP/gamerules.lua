@@ -201,6 +201,9 @@ function GameRules:OnUpdate(DeltaTime)
 	-- _time restarts with every map load, but Lua globals survive coop_restart
 	if _time < COOP_NextWake and COOP_NextWake - _time <= 1 then return end
 	COOP_NextWake = _time + 1
+	-- coop_map turned cutscenes off for a dedicated server; a listen host (it has a
+	-- _localplayer) plays the campaign as in single player, cutscenes included
+	if _localplayer then setglobal("mov_NoCutscenes", 0) end
 	CoopWrapBehaviours()
 	CoopWrapHud()
 	CoopWrapReleaseUser()

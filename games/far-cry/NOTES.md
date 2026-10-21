@@ -72,7 +72,7 @@ Mod v0.1: game type `COOP` (single-player rules), console command `coop_map <map
 
 Result: the weapon preload alone does not help. Real blocker: on campaign maps the server's entity updates never reach the client. The client copy of its own player stays at the spawn point with `hp=255` and no name, while on the server it is "Jack Carver" far away with other health; AI moved on the server stay at their XML position on the client. Input from the client does reach the server. On `mp_airstrip` with the same `COOP` rules sync works (crouch visible), so the cause is the campaign map (≈650 net entities), not the rules. Raising `sv_maxrate_lan` / `sv_maxrate` did not help; `cl_maxrate` on the command line runs before `Client` exists and is ignored. Suspects in C++: `CXSnapshot::BuildAndSendSnapshot` priority threshold, `CXClient::OnServerMsgTimeStamp` (`m_bIgnoreSnapshot`).
 
-Russian keyboard layout: the game does not take input with it; switch to EN before playing (to fix later).
+Russian keyboard layout: the game does not take input with it; switch to EN before playing (fixed 2026-10-21, Fix 11 in spike 9).
 
 Toolchain: MSVC 14.44 (VS 2022, x86) found at `D:\TailCore\toolchain\vs` (another project's, used read-only). Rebuilding `CryGame.dll` with it is unsafe: engine interfaces pass `std::string` / `std::vector` across DLL borders (e.g. `IEntitySystem::GetEntitiesInRadius`, `IXGame::CreateTagPoint`), and VS 2022 STL layout differs from VS 2003. Chosen path (owner, 2026-10-18): an ASI plugin (loaded by the already installed `version.dll`) that hooks functions of the original `CryGame.dll` 1.4 by address; addresses found with REA/Ghidra against the SDK source.
 
@@ -170,9 +170,18 @@ Known limitations (owner's decision, 2026-10-20):
 - Helicopters (`Gunship`, `CargoChopper`) are not synced: a client sees them hang at their spawn point while they fly and fight on the server. Helicopters are for the host only, in the planned mode where the host plays the normal single-player game and friends join it.
 - Physics props: a remote player's body does not push barrels or crates on the server (nothing moved there when the client pushed them), so they stay put for everyone. Props pushed by explosions on the server are synced.
 
+## Spike 9 — host mode and the Russian keyboard layout (2026-10-21)
+
+Host mode: the host plays in the normal game (`FarCry.exe`) and friends join it. `CoopMap` already loads the map with `Game:LoadLevelListen`, so run from the game client it makes a listen server where the host is a local player: `_localplayer`, area triggers and helicopters work for him as in single player. Verified with two windows on one PC (the second one joins through LAN or `connect 127.0.0.1`): the client joins, the helicopter flies for the host. Changes:
+- ASI: the remote players' area update and the net presence of moved props run in every process that hosts (`hosting()`: the dedicated server, or a process that sent a snapshot in the last 2 s), not only in `FarCry_WinSV`.
+- Cutscenes: `coop_map` turns them off only without `Input` (dedicated server); clients turn them off only when they are not the server; the gamerules turn them back on for a host with a `_localplayer`. A level intro (Training's `first_cutscene`) is played by `Mission:OnMapChange` only when `g_MapChanged` is set, which single player's `ClientStuff:OnMapChange` does; the COOP `ClientStuff:OnInit` now sets it on the host. Not yet seen in game.
+- Open: the console command `coop_map` does nothing in the game client (on the dedicated server it works), neither with `%line` nor `%%`; `#CoopMap("pier")` typed in the console works.
+
+Fix 11 (ASI): CryInput builds its key table (scan code -> character, plain/Shift/Ctrl/AltGr; `0x33509c40`, called from keyboard init `0x3350a140`) with `MapVirtualKeyExA` + `ToAsciiEx` on `GetKeyboardLayout(0)`. With the Russian layout the letter keys became Cyrillic: the bindings read from `game.cfg` at startup were dropped (empty key settings) and the console took no Latin. The ASI hooks `user32!GetKeyboardLayout` first thing in its worker thread, before CrySystem loads CryInput, and returns the US layout (`LoadKeyboardLayoutA("00000409", KLF_NOTELLSHELL)`: loaded, not activated, so Windows keeps the player's layout). Patching CryInput's import after it had initialised was too late: the bindings were already gone. Verified: walking, crouching and the key settings work with the Russian layout.
+
 ## Next steps
 
-1. Host-plays-single-player mode: the host runs the normal campaign (everything, helicopters included, works for him as in single player), friends join it.
+1. Host mode: make the `coop_map` console command work in the game client; check the intro cutscene for the host; try other campaign maps.
 2. Verify checkpoints in game (Pier `saveTrigger56`, Training `saveTrigger3`).
 3. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks), enemies jerking on the client (the client moves them more often than the server does: extrapolation between updates); then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
 4. Real engine saves (option A of the saves recon), after the lightweight `coop_save`.

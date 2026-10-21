@@ -20,8 +20,9 @@ function CoopMap(name)
 	AvailableMODList.COOP.mission = mission;
 	setglobal("g_GameType", "COOP");
 	-- cutscene sequences need input and sound, which a dedicated server lacks (crashes in
-	-- CMovieUser::BeginCutScene and CryMovie sound tracks); remote clients never see them anyway
-	setglobal("mov_NoCutscenes", 1);
+	-- CMovieUser::BeginCutScene and CryMovie sound tracks); remote clients never see them anyway.
+	-- A listen host (it has Input) plays them as in single player.
+	if (not Input) then setglobal("mov_NoCutscenes", 1); end
 	local running = COOP_Map;
 	COOP_Map = name; -- before loading: the COOP gamerules (and the monitor) read it on load
 	if (running) then
@@ -30,7 +31,9 @@ function CoopMap(name)
 		Game:LoadLevelListen(name);
 	end
 end
-Game:AddCommand("coop_map", "CoopMap(%line)", "coop_map <campaign map>: start a campaign map as a co-op server");
+-- %% (quoted argument, as start_server does): with %line the game client passed the map name
+-- unquoted, so "coop_map pier" ran CoopMap(pier) with an undefined variable and did nothing
+Game:AddCommand("coop_map", "CoopMap(%%)","coop_map <campaign map>: start a campaign map as a co-op server");
 Game:AddCommand("coop_restart", "if (COOP_Map) then CoopMap(COOP_Map) end", "coop_restart: reload the current co-op map, clients stay connected");
 
 -- FarCryCoop test commands for the host (server console) ------------------------------------

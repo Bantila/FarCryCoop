@@ -38,6 +38,8 @@ API(BOOL) DisableThreadLibraryCalls(HANDLE);
 API(int) lstrcmpiA(const char *, const char *);
 API(int) wvsprintfA(char *, const char *, va_list);
 API(DWORD) timeBeginPeriod(DWORD);
+API(HANDLE) LoadKeyboardLayoutA(const char *, DWORD);
+API(HANDLE) GetKeyboardLayout(DWORD);
 
 int _fltused = 1;
 
@@ -54,11 +56,18 @@ void *__cdecl memset(void *d, int c, unsigned n)
 #define CRYGAME_TIMESTAMP 0x44e2f64du // PE header of the 1.4.0.1405 build
 #define CRYMOVIE_BASE 0x34000000u
 #define CRYMOVIE_TIMESTAMP 0x44ae37b4u
+#define CRYINPUT_BASE 0x33500000u
+#define CRYINPUT_TIMESTAMP 0x44ae37bbu
 #define CG(va) (g_base + ((va) - CRYGAME_BASE))
 
 static HANDLE g_log = (HANDLE)-1;
 static BYTE *g_base, *g_movie; // CryGame.dll, CryMovie.dll
 static int g_server;            // running in FarCry_WinSV.exe (set in DllMain)
+static DWORD g_snapTick;        // when this process last sent a snapshot (it hosts: dedicated or listen)
+static int hosting(void)
+{
+	return g_server || (g_snapTick && GetTickCount() - g_snapTick < 2000);
+}
 
 static void logf(const char *fmt, ...)
 {
@@ -195,7 +204,7 @@ static void sortNetEntities(BYTE *snap)
 	for (n = *(BYTE **)head; n != head; n = *(BYTE **)n) {
 		if (c == MAX_NET)
 			return; // ponytail: list too big, keep engine order and no budget
-		if (g_server && *(void **)(n + 0xc)) // CNetEntityInfo::m_pEntity
+		if (*(void **)(n + 0xc)) // CNetEntityInfo::m_pEntity
 			netPresenceIfMoved(*(void **)(n + 0xc));
 		dt = now - *(float *)(n + 0x10);
 		v[c] = n;
@@ -259,6 +268,7 @@ static void restoreHeldBack(void)
 static void(__fastcall *oSnap)(void *, void *);
 static void __fastcall hSnap(void *self, void *edx)
 {
+	g_snapTick = GetTickCount();
 	sortNetEntities((BYTE *)self);
 	g_inSnap = 1;
 	g_sent = g_full = 0;
@@ -408,13 +418,14 @@ static void __fastcall hSoundKey(void *self, void *edx, void *a, DWORD b, DWORD 
 // it now jumps here. Own player: the original block. Others on the server: only the area
 // update (not UpdateAutoCenter/UpdateCamera), skipping AI (m_bIsAI +0x3bc). Each player has
 // its own CXAreaUser (+0x674, m_pEntity at +0x690), so enter/leave is tracked per player.
-// Server process only: on a client, other players must not switch its music or EAX areas.
+// Only in a process that hosts the game (dedicated server, or a listen host that sent a snapshot
+// in the last 2 s): on a pure client, other players must not switch its music or EAX areas.
 static BYTE *g_areaBlock, *g_areaSkip; // 0x330ae184 (own player's block), 0x330ae218 (after it)
 static void(__fastcall *areaUpdatePlayer)(void *, void *, void *); // CXAreaMgr::UpdatePlayer 0x330d3ee8
 static void __cdecl remoteAreas(BYTE *player)
 {
 	static int logged;
-	if (!g_server || player[0x3bc]) // m_bIsAI
+	if (!hosting() || player[0x3bc]) // m_bIsAI
 		return;
 	*(void **)(player + 0x690) = *(void **)(player + 4); // m_AreaUser.SetEntity(m_pEntity)
 	areaUpdatePlayer(*(BYTE **)(player + 0x268) + 0x3ac, 0, player + 0x674); // m_pGame->m_XAreaMgr
@@ -493,6 +504,45 @@ static int hook(BYTE *p, int len, const BYTE *expect, void *fn, void **orig, con
 	return 1;
 }
 
+// FIX 11: CryInput builds its key table (DirectInput scan code -> character, plain/Shift/Ctrl/
+// AltGr; 0x33509c40, called from 0x3350a2b3) with MapVirtualKeyExA + ToAsciiEx on
+// GetKeyboardLayout(0), the layout of the moment. With the Russian layout the letter keys
+// became Cyrillic: the bindings ("w", "c", ...) stopped matching and the console took no
+// Latin, and the bindings read from game.cfg at startup were dropped (empty key settings).
+// So the game has to see the US layout before CryInput initialises: user32!GetKeyboardLayout
+// itself is hooked first thing in the worker, long before CrySystem loads CryInput, and returns
+// the US layout (loaded, not activated: Windows keeps the layout the player chose). Only this
+// game process is affected; typed text (WM_CHAR) still follows the real layout.
+static HANDLE g_usLayout;
+static HANDLE __stdcall usLayout(DWORD thread)
+{
+	(void)thread;
+	return g_usLayout;
+}
+
+static int hook(BYTE *p, int len, const BYTE *expect, void *fn, void **orig, const char *name);
+static void keyboardUS(void)
+{
+	static const BYTE gkl[] = {0x8b, 0xff, 0x55, 0x8b, 0xec}; // mov edi,edi; push ebp; mov ebp,esp
+	BYTE *p = (BYTE *)GetKeyboardLayout, *in;
+	void *unused; // usLayout never calls the original
+	g_usLayout = LoadKeyboardLayoutA("00000409", 0x80); // KLF_NOTELLSHELL, no KLF_ACTIVATE
+	if (!g_usLayout) {
+		logf("keyboard: US layout not available, layout not fixed");
+		return;
+	}
+	if (!hook(p, 5, gkl, usLayout, &unused, "user32!GetKeyboardLayout")) {
+		logf("keyboard: GetKeyboardLayout starts %x %x %x %x %x, layout not fixed", p[0], p[1], p[2], p[3], p[4]);
+		return;
+	}
+	in = (BYTE *)GetModuleHandleA("CryInput.dll");
+	if (in && *(DWORD *)(in + *(DWORD *)(in + 0x3c) + 8) == CRYINPUT_TIMESTAMP) {
+		((void(__cdecl *)(void))(in + (0x33509c40 - CRYINPUT_BASE)))(); // already up: rebuild its table
+		logf("keyboard: CryInput was already up, key table rebuilt (bindings may need a restart)");
+	}
+	logf("keyboard: the game uses the US layout");
+}
+
 static DWORD __stdcall worker(void *unused)
 {
 	static const BYTE eh[] = {0xb8, 0xff, 0xff, 0xff, 0xff};                // mov eax, imm32 (EH prolog)
@@ -502,6 +552,8 @@ static DWORD __stdcall worker(void *unused)
 	static const BYTE gw[] = {0x55, 0x8b, 0xec, 0xb8, 0x00, 0x10, 0, 0};    // push ebp; mov ebp,esp; mov eax,1000h
 	BYTE *nt;
 	int i;
+	if (!g_server) // first, before CryInput initialises; the dedicated server has no input
+		keyboardUS();
 	for (i = 0; i < 120000 && !(g_base = (BYTE *)GetModuleHandleA("CryGame.dll")); i++)
 		Sleep(1);
 	if (!g_base) {
@@ -531,7 +583,7 @@ static DWORD __stdcall worker(void *unused)
 	hook(CG(0x33080227), 5, ts, hTs, (void **)&oTs, "CXClient::OnServerMsgTimeStamp");
 	hook(CG(0x330816ef), 6, ue, hUe, (void **)&oUe, "CXClient::OnServerMsgUpdateEntity");
 	hook(CG(0x3307019e), 8, gw, hWarn, &oWarn, "GameWarning");
-	if (g_server) {
+	{ // every process: a listen host runs remote players' areas too (remoteAreas checks hosting())
 		static const BYTE je[] = {0x0f, 0x84, 0x94, 0x00, 0x00, 0x00}; // je +0x94 (skip area block)
 		void *unused; // the trampoline of a relative jump is never called
 		g_areaBlock = CG(0x330ae184);
