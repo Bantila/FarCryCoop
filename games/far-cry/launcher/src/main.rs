@@ -75,12 +75,33 @@ fn list_maps() -> Result<Vec<String>, String> {
     Ok(maps)
 }
 
-// the line goes into the game console as is: allow only map name characters
-fn host_line(map: &str) -> Result<String, String> {
+// launcher settings as Lua: written to prefs.lua and put in front of the console line too.
+// Two games on one PC share prefs.lua, so each game gets its own settings in its own line
+// (COOP ClientStuff reads prefs.lua only when the line did not set them).
+fn prefs(me: &Value, loadout: bool) -> String {
+    let weapons: Vec<&str> = me["weapons"].as_array().map(|a| a.iter().filter_map(|w| w.as_str()).collect()).unwrap_or_default();
+    format!(
+        "COOP_Color={} COOP_Weapons=\"{}\" COOP_LoadoutMode={}",
+        me["color"].as_u64().unwrap_or(1),
+        weapons.join(" "),
+        loadout as u8
+    )
+}
+
+// the lines go into the game console as is: allow only map name and address characters
+fn host_line(map: &str, me: &Value, loadout: bool) -> Result<String, String> {
     if map.is_empty() || !map.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return Err("bad map".into());
     }
-    Ok(format!("#CoopMap(\"{}\")", map))
+    Ok(format!("#{} CoopMap(\"{}\")", prefs(me, loadout), map))
+}
+
+fn connect_line(ip: &str, me: &Value) -> Result<String, String> {
+    if ip.is_empty() || !ip.chars().all(|c| c.is_ascii_alphanumeric() || ".:-".contains(c)) {
+        return Err("bad address".into());
+    }
+    let addr = if ip.contains(':') { ip.to_string() } else { format!("{}:49001", ip) };
+    Ok(format!("#{} Game:Connect(\"{}\",1)", prefs(me, false), addr))
 }
 
 fn write_join(line: &str) -> Result<(), String> {
@@ -91,15 +112,8 @@ fn write_join(line: &str) -> Result<(), String> {
 fn start_game(me: &Value, loadout: bool, line: Option<String>) -> Result<(), String> {
     let bin = bin32()?;
     let moddir = mod_dir()?;
-    let weapons: Vec<&str> = me["weapons"].as_array().map(|a| a.iter().filter_map(|w| w.as_str()).collect()).unwrap_or_default();
     // Lua 4 reads it: plain ASCII, no BOM
-    let prefs = format!(
-        "COOP_Color={}\r\nCOOP_Weapons=\"{}\"\r\nCOOP_LoadoutMode={}\r\n",
-        me["color"].as_u64().unwrap_or(1),
-        weapons.join(" "),
-        loadout as u8
-    );
-    std::fs::write(moddir.join("prefs.lua"), prefs).map_err(|e| e.to_string())?;
+    std::fs::write(moddir.join("prefs.lua"), prefs(me, loadout)).map_err(|e| e.to_string())?;
     match line {
         Some(l) => write_join(&l)?,
         None => {

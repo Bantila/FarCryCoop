@@ -120,6 +120,7 @@ static void(__cdecl *ClearRichPresence)(void *);
 static int(__cdecl *SendToUser)(void *, const Identity *, const void *, DWORD, int, int);
 static int(__cdecl *Receive)(void *, int, void **, int);
 static BYTE(__cdecl *AcceptSession)(void *, const Identity *);
+static BYTE(__cdecl *HasFriend)(void *, U64, int);
 static void(__cdecl *InitRelay)(void *);
 static void(__cdecl *Release)(void *);
 static int g_pipe;
@@ -160,6 +161,7 @@ static void steamInit(void)
 	SendToUser = (int(__cdecl *)(void *, const Identity *, const void *, DWORD, int, int))sym("SteamAPI_ISteamNetworkingMessages_SendMessageToUser");
 	Receive = (int(__cdecl *)(void *, int, void **, int))sym("SteamAPI_ISteamNetworkingMessages_ReceiveMessagesOnChannel");
 	AcceptSession = (BYTE(__cdecl *)(void *, const Identity *))sym("SteamAPI_ISteamNetworkingMessages_AcceptSessionWithUser");
+	HasFriend = (BYTE(__cdecl *)(void *, U64, int))sym("SteamAPI_ISteamFriends_HasFriend");
 	InitRelay = (void(__cdecl *)(void *))sym("SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess");
 	Release = (void(__cdecl *)(void *))sym("SteamAPI_SteamNetworkingMessage_t_Release");
 	DispatchInit();
@@ -196,7 +198,7 @@ static SOCKET udp(DWORD ip, int port) // bound, non-blocking; -1 if the port is 
 }
 
 // ---- tunnel ----
-static int g_loop;
+static int g_loop, g_up;          // g_up: a Far Cry server runs on this PC
 static U64 g_me, g_host;          // friend side: the host we joined
 static SOCKET g_game = (SOCKET)-1; // friend side: 127.0.0.1:49011
 static Addr g_gameAddr;
@@ -331,8 +333,15 @@ static void callbacks(void)
 	CallbackMsg cb;
 	RunFrame(g_pipe);
 	while (NextCallback(g_pipe, &cb)) {
-		if (cb.id == CB_SESSION_REQUEST)
-			AcceptSession(g_msgs, (const Identity *)cb.param); // anyone who got our SteamID from Join
+		if (cb.id == CB_SESSION_REQUEST) {
+			// only while we host, and only Steam friends (k_EFriendFlagImmediate): a stranger who
+			// learned our SteamID gets no session, so none of their packets reach our server
+			const Identity *who = (const Identity *)cb.param;
+			if (g_up && who->type == 16 && HasFriend(g_friends, who->u.steamID, 4))
+				AcceptSession(g_msgs, who);
+			else
+				say("session from %x%08x refused: not a friend, or no server", HI(who->u.steamID), (DWORD)who->u.steamID);
+		}
 		else if (cb.id == CB_JOIN_REQUESTED) {
 			const char *c = (const char *)cb.param + 8;
 			if (c[0] == '+' && c[1] == 'c' && c[5] == 'p' && c[6] == ' ') // "+coop <hex SteamID>"
@@ -384,7 +393,7 @@ void __cdecl start(void)
 			int now = serverUp();
 			check = GetTickCount();
 			if (now != up) {
-				up = now;
+				up = g_up = now;
 				if (!g_loop && up) {
 					SetRichPresence(g_friends, "status", "Far Cry co-op host");
 					SetRichPresence(g_friends, "connect", connect);

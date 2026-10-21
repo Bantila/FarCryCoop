@@ -23,6 +23,7 @@ struct Lobby {
     loadout: bool,
     next_id: u32,
     host_ip: String,
+    started: bool, // "start" happens once; a client acts on "go" only after it
 }
 
 static LOBBY: Mutex<Option<Lobby>> = Mutex::new(None);
@@ -37,6 +38,10 @@ pub fn clean_me(me: &Value) -> Value {
         .unwrap_or_default();
     json!({ "name": if name.trim().is_empty() { "Player".into() } else { name }, "color": color, "weapons": weapons })
 }
+
+// every write happens with LOBBY locked: a peer that stops reading must not hang the lobby,
+// so writes time out and that peer is dropped
+const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
 
 fn send(s: &mut TcpStream, v: &Value) -> bool {
     s.write_all(format!("{}\n", v).as_bytes()).is_ok()
@@ -76,7 +81,8 @@ fn read_lines(s: TcpStream, mut on_line: impl FnMut(Value)) {
 
 pub fn host(app: AppHandle, me: Value, map: String, loadout: bool) -> Result<(), String> {
     let listener = TcpListener::bind(("0.0.0.0", PORT)).map_err(|e| format!("TCP {}: {}", PORT, e))?;
-    let mut l = Lobby { host: true, players: vec![(0, clean_me(&me))], conns: vec![], map, loadout, next_id: 1, host_ip: String::new() };
+    let mut l = Lobby { host: true, players: vec![(0, clean_me(&me))], conns: vec![], map, loadout, next_id: 1, host_ip: String::new(),
+        started: false };
     broadcast_state(&app, &mut l);
     *LOBBY.lock().unwrap() = Some(l);
     std::thread::spawn(move || {
@@ -85,6 +91,7 @@ pub fn host(app: AppHandle, me: Value, map: String, loadout: bool) -> Result<(),
             let Some(l) = guard.as_mut().filter(|l| l.host) else { return };
             let id = l.next_id;
             l.next_id += 1;
+            let _ = s.set_write_timeout(Some(WRITE_TIMEOUT));
             let Ok(w) = s.try_clone() else { continue };
             l.conns.push((id, w));
             drop(guard);
@@ -114,13 +121,15 @@ pub fn host(app: AppHandle, me: Value, map: String, loadout: bool) -> Result<(),
 }
 
 pub fn join(app: AppHandle, ip: String, me: Value) -> Result<(), String> {
+    crate::connect_line(&ip, &me)?; // the address goes into the game console later: check it now
     let addr = format!("{}:{}", ip, PORT);
     let sock = std::net::ToSocketAddrs::to_socket_addrs(&addr).map_err(|e| e.to_string())?.next().ok_or("bad address")?;
     let mut s = TcpStream::connect_timeout(&sock, Duration::from_secs(5)).map_err(|e| format!("{}: {}", addr, e))?;
+    let _ = s.set_write_timeout(Some(WRITE_TIMEOUT));
     send(&mut s, &json!({ "t": "me", "me": me }));
     let r = s.try_clone().map_err(|e| e.to_string())?;
     *LOBBY.lock().unwrap() = Some(Lobby { host: false, players: vec![], conns: vec![(0, s)], map: String::new(),
-        loadout: false, next_id: 0, host_ip: ip });
+        loadout: false, next_id: 0, host_ip: ip, started: false });
     std::thread::spawn(move || {
         read_lines(r, |v| {
             let mut guard = LOBBY.lock().unwrap();
@@ -130,12 +139,15 @@ pub fn join(app: AppHandle, ip: String, me: Value) -> Result<(), String> {
                     l.map = v["map"].as_str().unwrap_or("").into();
                     l.loadout = v["loadout"].as_bool().unwrap_or(false);
                 }
-                Some("start") => {
+                Some("start") if !l.started => {
+                    l.started = true;
                     let me = crate::me();
                     let _ = crate::start_game(&me, l.loadout, None);
                 }
-                Some("go") => {
-                    let _ = crate::write_join(&format!("connect {}", l.host_ip));
+                Some("go") if l.started => {
+                    if let Ok(line) = crate::connect_line(&l.host_ip, &crate::me()) {
+                        let _ = crate::write_join(&line);
+                    }
                 }
                 _ => {}
             }
@@ -168,10 +180,15 @@ pub fn start(app: AppHandle) -> Result<(), String> {
     let (map, loadout) = {
         let mut guard = LOBBY.lock().unwrap();
         let l = guard.as_mut().filter(|l| l.host).ok_or("not hosting a lobby")?;
+        if l.started {
+            return Err("already started".into());
+        }
+        l.started = true;
         broadcast(&app, l, &json!({ "t": "start" }));
         (l.map.clone(), l.loadout)
     };
-    crate::start_game(&crate::me(), loadout, Some(crate::host_line(&map)?))?;
+    let me = crate::me();
+    crate::start_game(&me, loadout, Some(crate::host_line(&map, &me, loadout)?))?;
     std::thread::spawn(move || {
         for _ in 0..300 {
             std::thread::sleep(Duration::from_secs(1));
