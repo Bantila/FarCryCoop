@@ -20,7 +20,7 @@ no exceptions. NEVER download into `%TEMP%`. Before running any tool, load `. E:
 (it points TEMP/TMP, npm cache, JAVA_HOME, Ghidra to `E:\FarCryCoop`). Layout:
 `Downloads\<name>\` — verified archives (one folder each); `Tools\` — unpacked tools;
 `Data\` — tool settings and caches; `Temp\` — temporary files. The game at
-`D:\SteamLibrary\steamapps\common\Far Cry 6` is read-only (AGENTS.md rule 2); work on copies in
+`D:\SteamLibrary\steamapps\common\FarCry` is read-only (AGENTS.md rule 2); work on copies in
 `E:\FarCryCoop`. If a step would need drive C:, stop and ask the owner.
 
 **RU:** Работать ТОЛЬКО внутри `E:\FarCryCoop`. НИКОГДА ничего не читать, не писать и не скачивать
@@ -28,17 +28,17 @@ no exceptions. NEVER download into `%TEMP%`. Before running any tool, load `. E:
 загружать `. E:\FarCryCoop\env.ps1` (он направляет TEMP/TMP, кэш npm, JAVA_HOME, Ghidra в
 `E:\FarCryCoop`). Структура: `Downloads\<имя>\` — проверенные архивы (у каждого своя папка);
 `Tools\` — распакованные инструменты; `Data\` — настройки и кэши инструментов; `Temp\` — временные
-файлы. Игра в `D:\SteamLibrary\steamapps\common\Far Cry 6` — только чтение (правило 2 AGENTS.md);
+файлы. Игра в `D:\SteamLibrary\steamapps\common\FarCry` — только чтение (правило 2 AGENTS.md);
 работать с копиями в `E:\FarCryCoop`. Если шаг требует диска C:, остановиться и спросить владельца.
 
 ## Commits / Коммиты
 
 **EN:** Commit messages follow Conventional Commits (https://www.conventionalcommits.org/en/v1.0.0/)
 and are written in English only: `<type>(<optional scope>): <description>`, e.g.
-`docs(far-cry-6): add research notes`. Types: feat, fix, docs, chore, refactor, test, build, ci, perf, style, revert.
+`docs(far-cry): add research notes`. Types: feat, fix, docs, chore, refactor, test, build, ci, perf, style, revert.
 
 **RU:** Сообщения коммитов пишутся по Conventional Commits и только на английском:
-`<тип>(<область, необязательно>): <описание>`, например `docs(far-cry-6): add research notes`.
+`<тип>(<область, необязательно>): <описание>`, например `docs(far-cry): add research notes`.
 
 ## Tools / Инструменты
 

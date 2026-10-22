@@ -11,7 +11,7 @@ Load the environment first: `. E:\FarCryCoop\env.ps1`.
 | `Tools\` | Unpacked portable tools |
 | `Data\` | Tool settings and caches (Ghidra settings/cache, npm cache, npm global prefix) |
 | `Temp\` | Temporary files (`TEMP`/`TMP` point here) |
-| `FarCryCoop\` | This repository |
+| `FarCryCoop\`, `FarCry<N>Coop\` | Repositories, one folder per game |
 
 ## Installed tools (2026-10-18)
 

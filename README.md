@@ -4,7 +4,7 @@
 
 Play the original Far Cry campaign together: one player hosts a campaign map, friends join it and play the missions side by side. It is a mod: a script pack in `Mods\FarCryCoop`, a small ASI plugin that fixes the engine's networking for campaign maps, and a launcher with a lobby. No game files are replaced.
 
-**Status: 0.2 beta, in active development** (branch `game/far-cry`, started 2026-10-18). Tested with 2 players on Far Cry 1.4 (Steam). Target: up to 4 players. Expect bugs.
+**Status: 0.2 beta, in active development** (started 2026-10-18). Tested with 2 players on Far Cry 1.4 (Steam). Target: up to 4 players. Expect bugs.
 
 ## Contents
 
@@ -162,7 +162,6 @@ games/far-cry/
   steam/                         Steam join bridge (C)
   launcher/                      launcher with lobby (Rust + Tauri)
   release/                       player archive script and INSTALL notes
-games/far-cry-*/                 notes for the other games of the series
 docs/                            workspace and tool setup
 ```
 
@@ -179,10 +178,18 @@ License: [MIT](LICENSE). Far Cry is a trademark of Crytek / Ubisoft. This is a f
 
 ## Other games of the series
 
-| Game | Notes | Status |
+One repository per game. Private ones open up when work on that game gets close.
+
+| Game | Repository | Status |
 |---|---|---|
-| Far Cry (2004) | [NOTES.md](games/far-cry/NOTES.md) | **0.2 beta** (this branch) |
-| Far Cry 6 | [NOTES.md](games/far-cry-6/NOTES.md) | research |
-| Far Cry 2, 3, Blood Dragon, 4, 5, New Dawn, Primal | `games/far-cry-*/NOTES.md` | placeholders |
+| Far Cry (2004) | this one | **0.2 beta** |
+| Far Cry 2 | `FarCry2Coop` (private) | placeholder |
+| Far Cry 3 | [FarCry3Coop](https://github.com/Bantila/FarCry3Coop) | plan, next game |
+| Far Cry 3: Blood Dragon | `FarCry3BloodDragonCoop` (private) | placeholder |
+| Far Cry 4 | `FarCry4Coop` (private) | placeholder |
+| Far Cry 5 | `FarCry5Coop` (private) | placeholder |
+| Far Cry Primal | `FarCryPrimalCoop` (private) | placeholder |
+| Far Cry New Dawn | `FarCryNewDawnCoop` (private) | placeholder |
+| Far Cry 6 | `FarCry6Coop` (private) | research |
 
 Workspace: [docs/workspace.md](docs/workspace.md)
