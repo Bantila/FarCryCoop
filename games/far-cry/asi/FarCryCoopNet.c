@@ -174,22 +174,28 @@ static int heliClass(WORD c)
 {
 	return c == 101 || c == 102; // CargoChopper, Gunship
 }
+// Mods\FarCryCoop\npmask.txt (decimal, optional; for bisecting a crash) turns classes off:
+// 1 Paraglider, 2 RigidBody, 4 DestroyableObject, 8 BasicEntity, 16 helicopters. Default 31.
+static DWORD g_npMask = 31;
 static int syncedClass(WORD c)
 { // ClassRegistry.lua: Paraglider, RigidBody, DestroyableObject, BasicEntity, CargoChopper, Gunship.
   // Helicopters at a normal priority got ~7 updates/s and flew in jerks on the client: hUpd
   // sends them in every snapshot (Boat has a gunship boss, the owner wants them for everyone)
-	return c == 95 || c == 131 || c == 133 || c == 146 || heliClass(c); // + Paraglider: frozen on clients of a listen host
+	// + Paraglider: frozen on clients of a listen host
+	return ((c == 95) && (g_npMask & 1)) || ((c == 131) && (g_npMask & 2)) || ((c == 133) && (g_npMask & 4)) ||
+	       ((c == 146) && (g_npMask & 8)) || (heliClass(c) && (g_npMask & 16));
 }
 static float g_firstPos[65536][3];
 static BYTE g_posSeen[65536];
 static void netPresenceIfMoved(void *ent)
 {
-	WORD id;
+	WORD id, cls;
 	Vec3 *p;
 	float *q, dx, dy, dz;
 	if (((BYTE(__fastcall *)(void *, void *))VFN(ent, 0xd0))(ent, 0)) // already sent
 		return;
-	if (!syncedClass(((WORD(__fastcall *)(void *, void *))VFN(ent, 0xe8))(ent, 0)))
+	cls = ((WORD(__fastcall *)(void *, void *))VFN(ent, 0xe8))(ent, 0);
+	if (!syncedClass(cls))
 		return;
 	id = ((WORD(__fastcall *)(void *, void *))VFN(ent, 0xc4))(ent, 0);
 	p = ((Vec3 * (__fastcall *)(void *, void *, int))VFN(ent, 0x04))(ent, 0, 1);
@@ -203,7 +209,7 @@ static void netPresenceIfMoved(void *ent)
 	if (dx * dx + dy * dy + dz * dz < 0.01f)
 		return;
 	((void(__fastcall *)(void *, void *, int))VFN(ent, 0xd4))(ent, 0, 1);
-	logf("net presence on for moved entity %u", id);
+	logf("net presence on for moved entity %u (class %u)", id, cls);
 }
 
 #define MAX_NET 4096
@@ -356,6 +362,7 @@ static BYTE __fastcall hTs(void *self, void *edx, void *stm)
 }
 
 static BYTE(__fastcall *oUe)(void *, void *, void *);
+static DWORD g_ueId, g_ueClass, g_inUe; // the entity update being parsed (for hPhysErr)
 static BYTE __fastcall hUe(void *self, void *edx, void *stm)
 {
 	DWORD *rd = (DWORD *)((BYTE *)stm + 0x474), at = *rd, id = 0; // CStream read position
@@ -369,7 +376,13 @@ static BYTE __fastcall hUe(void *self, void *edx, void *stm)
 		s.idMin = (WORD)id;
 	if ((WORD)id > s.idMax)
 		s.idMax = (WORD)id;
+	g_ueId = (WORD)id;
+	sys = *(void **)((BYTE *)self + 0x4c);
+	ent = ((void *(__fastcall *)(void *, void *, int))VFN(sys, 0x58))(sys, 0, (WORD)id);
+	g_ueClass = ent ? ((WORD(__fastcall *)(void *, void *))VFN(ent, 0xe8))(ent, 0) : 0xffff;
+	g_inUe = 1;
 	r = oUe(self, edx, stm);
+	g_inUe = 0;
 	s.ue++;
 	s.myId = *(WORD *)((BYTE *)self + 0xc); // m_wPlayerID
 	if ((WORD)id == s.myId) {
@@ -637,6 +650,31 @@ static void steamJoin(void)
 	logf("steam: polling %s", g_join);
 }
 
+// CryPhysics.dll's error reporter (FUN_350052d0, RVA 0x52d0, printf-like, cdecl): it shows the
+// "CryEngine Error" window and ends the game. The hook logs the format, two arguments and the
+// return addresses (ebp chain) first, to find who read a broken physics stream
+// ("ReadPacked i==%i" with i > 16 means the stream is out of step).
+static BYTE *g_phys;
+static void(__cdecl *oPhysErr)(const char *, int, int, int);
+static void __cdecl hPhysErr(const char *fmt, int a1, int a2, int a3)
+{
+	DWORD *fp, ret[10];
+	int n = 0;
+	__asm mov fp, ebp
+	while (n < 10 && (DWORD)fp > 0x10000 && !((DWORD)fp & 3)) {
+		ret[n++] = fp[1];
+		if (fp[0] <= (DWORD)fp)
+			break;
+		fp = (DWORD *)fp[0];
+	}
+	logf("PHYSICS ERROR \"%s\" %d %d; in entity update: %u, entity %u class %u; CryPhysics at %x, CryGame at %x", fmt, a1, a2, g_inUe,
+	     g_ueId, g_ueClass, (DWORD)g_phys, (DWORD)g_base);
+	logf("  stack: %x %x %x %x %x %x %x %x %x %x", n > 0 ? ret[0] : 0, n > 1 ? ret[1] : 0, n > 2 ? ret[2] : 0,
+	     n > 3 ? ret[3] : 0, n > 4 ? ret[4] : 0, n > 5 ? ret[5] : 0, n > 6 ? ret[6] : 0, n > 7 ? ret[7] : 0,
+	     n > 8 ? ret[8] : 0, n > 9 ? ret[9] : 0);
+	oPhysErr(fmt, a1, a2, a3);
+}
+
 static DWORD __stdcall worker(void *unused)
 {
 	static const BYTE eh[] = {0xb8, 0xff, 0xff, 0xff, 0xff};                // mov eax, imm32 (EH prolog)
@@ -685,6 +723,14 @@ static DWORD __stdcall worker(void *unused)
 		areaUpdatePlayer = (void(__fastcall *)(void *, void *, void *))CG(0x330d3ee8);
 		hook(CG(0x330ae17e), 6, je, hArea, &unused, "CPlayer::Update area check");
 	}
+	{
+		static const BYTE pe[] = {0xb8, 0x00, 0x10, 0x00, 0x00}; // mov eax, 1000h (then the stack probe)
+		g_phys = (BYTE *)GetModuleHandleA("CryPhysics.dll");
+		if (g_phys)
+			hook(g_phys + 0x52d0, 5, pe, hPhysErr, (void **)&oPhysErr, "CryPhysics error reporter");
+		else
+			logf("CryPhysics.dll not loaded, error reporter not hooked");
+	}
 	AddVectoredExceptionHandler(1, onFault);
 	if (!g_server)
 		steamJoin();
@@ -726,9 +772,22 @@ BOOL __stdcall DllMain(HANDLE self, DWORD reason, void *reserved)
 	for (cut = 0; cut < n; cut++)
 		g_joinOwn[cut] = path[cut];
 	wvsprintfA(g_joinOwn + n, "\\Mods\\FarCryCoop\\join_%u.txt", (va_list)(args + 1));
+	wvsprintfA(path + n, "\\Mods\\FarCryCoop\\npmask.txt", 0);
+	{
+		HANDLE f = CreateFileA(path, 0x80000000, 1, 0, 3, 0x80, 0);
+		char b[16];
+		DWORD got = 0, v = 0;
+		if (f != (HANDLE)-1) {
+			ReadFile(f, b, sizeof b - 1, &got, 0);
+			CloseHandle(f);
+			for (cut = 0; cut < (int)got && b[cut] >= '0' && b[cut] <= '9'; cut++)
+				v = v * 10 + (b[cut] - '0');
+			g_npMask = v;
+		}
+	}
 	wvsprintfA(path + n, "\\Mods\\FarCryCoop\\netlog_%s_%u.txt", (va_list)args);
 	g_log = CreateFileA(path, 0x40000000, 1, 0, 2, 0x80, 0); // GENERIC_WRITE, FILE_SHARE_READ, CREATE_ALWAYS
-	logf("FarCryCoopNet loaded in %s", name);
+	logf("FarCryCoopNet loaded in %s, net presence mask %u", name, g_npMask);
 	CreateThread(0, 0, worker, 0, 0, 0);
 	return 1;
 }
