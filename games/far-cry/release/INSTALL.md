@@ -53,8 +53,16 @@ Friend: start `FarCryCoop.bat`, then Multiplayer → LAN, or in the console: `co
 3. A weapon taken from an enemy carries over to the next level.
 4. Lobby: "Start" starts the game for everyone, and friends connect by themselves.
 5. Steam: "Join Game" connects without an IP.
+6. Saves: a checkpoint, F6 and F7 work for the host; a save chosen in the launcher's map list starts the game on the saved spot.
 
 If something does not work, send `log.txt` from the Far Cry folder, the `netlog_*.txt` files from `Mods\FarCryCoop`, and the text of the "Far Cry co-op: Steam" window. To test alone, press "Test on one PC": the host's game opens on the left and loads the map, then a second game opens on the right and joins by itself, with the next shirt color.
+
+## Saves (host)
+- A checkpoint saves the game by itself (`auto`). **F6** is quicksave, **F7** quickload (`quick`). Console: `#CoopSave("name")`, `#CoopLoad("name")`.
+- A load reloads the map: joined players stay connected and are put back where they were saved.
+- To continue after you closed the game: in the launcher choose `save:auto` (or `save:quick`, or your name) instead of a map, and press Host lobby / Start. Friends join as usual.
+- Saved: players' position, health, armor, weapons and ammo, which enemies are dead. Not saved: mission progress, triggers, pickups, vehicles. The mission starts from the beginning of the map, with the dead enemies gone.
+- Files: `Mods\FarCryCoop\save_<name>.lua`.
 
 ## Useful console commands (host)
 - `#CoopGod(1)` / `#CoopGod(0)` — god mode for everyone on/off

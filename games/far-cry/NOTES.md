@@ -215,6 +215,18 @@ Crysis co-op ([SeniorStackOverflow/crysis-coop](https://github.com/SeniorStackOv
 - **Joining:** a 6-digit join code per host, UDP hole punching, and a WebSocket relay fallback on one VPS on port 443. This makes play possible without Steam or a VPN, and is a candidate after the Spacewar bridge.
 - **Other features:** downed players can be revived, the whole team resets to the checkpoint when everyone is down, inventories are kept per player, and clients rejoin by themselves after the host reloads a level.
 
+## Spike 11 — campaign saves for the host (2026-10-22)
+
+The engine's `CXGame::Save` and `LoadFromStream` return early in multiplayer, so the saves are a Lua save (option B of the saves recon), kept in a file so that it survives a restart of the game: `Mods\FarCryCoop\save_<name>.lua`, a Lua table (`COOP_LoadedSave = {...}`) written with `writeto`/`write`, read back with `dofile`. It holds the map, for each player the position, angles, health, armor, weapons, current weapon and ammo, the ids of the dead AI (static entity ids stay the same when the map reloads), and the respawn point (`_LastCheckPPos`). A dead player is saved alive. Not saved: mission scripts, triggers, pickups, vehicles. After a load the mission script starts from the beginning of the map, with the dead AI removed (`Server:RemoveEntity`; there is no `System:RemoveEntity`) and the players put back.
+
+- **Autosave:** a checkpoint (`GameEvent`, a save trigger) calls `Game:OnAfterSave` after it set `_LastCheckPPos`; the COOP rules wrap it and save as `auto`.
+- **Quicksave / quickload:** F6 / F7 on the host (`Input:BindCommandToKey`), saves as `quick`; or `coop_save` / `coop_load`.
+- **By hand:** `coop_savegame <name>`, `coop_loadgame <name>`.
+- **Load:** with a game running, `CoopLoad` sets `COOP_PendingMap` and `COOP_PendingLoad`; `GameRules:OnUpdate` calls `CoopMap` (`LoadLevelMPServer`, joined players stay connected), and `CoopApplyLoad` runs once every player has spawned. From a fresh start, the launcher lists the files as maps called `save:<name>`; the host's line is `CoopLoad("<name>")`, which starts the server with `CoopMap`. Friends join as usual and spawn at the saved respawn point.
+- The weapon code of the level carry-over (`CoopCollectLoadout`, `CoopGiveLoadout`) is shared with the saves.
+
+Verified in game (Pier, two games on one PC): `CoopSave`, then `CoopTeleport` 60 m away, then `CoopLoad`: the host and the client are back on the saved spot; a checkpoint creates `save_auto.lua`; the launcher starts a game from `save:t2` and both players appear on the saved spot. Not verified: the F6/F7 keys (no keyboard in the test), the single-player "Load Game" menu (not connected: it loads single-player saves), a long mission played through after a load.
+
 ## Level survey (2026-10-21)
 
 Every campaign level's `level.pak` (mission XML, `moviedata.xml`, level Lua) scanned for what matters to co-op (script: `Tempnalyze_levels.py`, not committed). Order as in `DEFIANT`.
@@ -257,7 +269,7 @@ Findings:
 1. Host mode: check the intro cutscene for the host; try other campaign maps.
 2. Verify checkpoints in game (Pier `saveTrigger56`, Training `saveTrigger3`).
 3. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks); then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
-4. Real campaign saves (owner's priority, 2026-10-21): the host saves and loads; friends reconnect. Option A of the saves recon.
+4. Campaign saves: done as a Lua save (Spike 11). Left: mission state, triggers and pickups are not saved; try the engine's own saves (option A) only if that matters.
 4a. Cutscenes and helicopters for joined players (owner's priority). Enemies on the client move fine (owner); the short console commands are dropped.
 5. Joining without Steam or a VPN: join code, UDP hole punching and a relay (crysis-coop idea above).
 6. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).

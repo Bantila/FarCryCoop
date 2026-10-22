@@ -72,6 +72,17 @@ fn list_maps() -> Result<Vec<String>, String> {
         .filter(|n| !n.to_lowercase().starts_with("mp_") && n != "Demo" && n != "newcontrol")
         .collect();
     maps.sort();
+    // co-op saves (Mods\FarCryCoop\save_<name>.lua, written by the host's game) follow as "save:<name>"
+    if let Ok(dir) = mod_dir().and_then(|d| std::fs::read_dir(d).map_err(|e| e.to_string())) {
+        let mut saves: Vec<String> = dir
+            .filter_map(|e| e.ok())
+            .filter_map(|e| e.file_name().to_string_lossy().strip_prefix("save_")?.strip_suffix(".lua").map(String::from))
+            .filter(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+            .map(|n| format!("save:{}", n))
+            .collect();
+        saves.sort();
+        maps.extend(saves);
+    }
     Ok(maps)
 }
 
@@ -90,10 +101,14 @@ fn prefs(me: &Value, loadout: bool) -> String {
 
 // the lines go into the game console as is: allow only map name and address characters
 fn host_line(map: &str, me: &Value, loadout: bool) -> Result<String, String> {
-    if map.is_empty() || !map.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+    let (call, name) = match map.strip_prefix("save:") {
+        Some(n) => ("CoopLoad", n),
+        None => ("CoopMap", map),
+    };
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return Err("bad map".into());
     }
-    Ok(format!("#{} CoopMap(\"{}\")", prefs(me, loadout), map))
+    Ok(format!("#{} {}(\"{}\")", prefs(me, loadout), call, name))
 }
 
 fn connect_line(ip: &str, me: &Value) -> Result<String, String> {
