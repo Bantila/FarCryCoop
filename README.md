@@ -36,15 +36,17 @@ Far Cry has no official co-op. The campaign already runs as a local server plus 
 | Leaving vehicles and the paraglider | works | the server tells the client to let go |
 | Barrels and crates moved on the server | works | moved by explosions; no player can push them, the host included |
 | Russian keyboard layout | works | the game used to lose its key bindings with it |
-| Checkpoints and respawn | partly | the respawn point follows checkpoints; not seen in game on every map |
+| Checkpoints and respawn | partly | the respawn point follows checkpoints; hopping to the checkpoints of 9 levels worked for both players; a client respawning at a checkpoint after death not seen |
 | Shirt color | works | 10 colors from the launcher; other players use the multiplayer Jack model, which has the color mask |
 | Loadout | in testing | 4 of 11 weapons, chosen in the launcher; the host turns it on |
 | Lobby | in testing | player list with colors and loadouts; "Start" not yet tried with two games |
 | Join through Steam friends | in testing | bridge runs as Spacewar (AppID 480) |
 | Cutscenes | partly | the host sees them; joined players do not |
 | Paraglider | works | a copy appears for each next player; to others a climbing glider looks as if it falls |
-| Helicopters | host only | joined players see them hanging in place |
-| Saves | no | `coop_save` / `coop_load` keep a test checkpoint in server memory |
+| Helicopters | partly | a helicopter that moves on the host is followed by the client; one that has not moved hovers at another height on the client; a real mission flight not seen |
+| Saves | host only | autosave at checkpoints, `coop_save` / `coop_load` (F6 / F7 not tested), start from a save in the launcher; players, weapons and dead enemies, not mission progress |
+| Difficulty | works | launcher or `#CoopDifficulty(n)`; the five levels of the single-player menu |
+| Levels | 18 of 20 | Treehouse and Swamp crash at the load ([#1](https://github.com/Bantila/FarCryCoop/issues/1)); the Bunker → Steam change crashes the host ([#2](https://github.com/Bantila/FarCryCoop/issues/2)) |
 
 The full research log with every fix, address and test is in [games/far-cry/NOTES.md](games/far-cry/NOTES.md).
 
@@ -88,7 +90,8 @@ Type them in the console (`~`) as `#Function()`; the short form (`coop_god 1`) w
 | `#CoopGather()` | move everyone to the host |
 | `#CoopNoclip(1)` | fly mode for everyone |
 | `#CoopBot()` | spawn a teammate bot that follows the nearest player |
-| `#CoopSave()` / `#CoopLoad()` | test checkpoint in server memory |
+| `#CoopSave("name")` / `#CoopLoad("name")` | save / load a co-op game (`quick` and `auto` are the default names) |
+| `#CoopDifficulty(2)` | difficulty 0-4 (easy, medium, challenging, veteran, realistic) |
 | `#CoopMonitorSet(1)` | log the state of players, AI and vehicles once a second (debugging) |
 
 ## How it works
@@ -120,22 +123,26 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 
 ## Known limitations
 
-- Helicopters (`Gunship`, `CargoChopper`) fly only for the host; joined players see them hanging at their start point.
+- Helicopters (`Gunship`, `CargoChopper`): a client follows a helicopter once it has moved on the host; before that it hovers up to 34 m higher. A real mission flight (the Boat boss) is not seen.
+- **Treehouse and Swamp crash at the level load** (`CRITICAL ERROR:: ReadPacked i== 20`): [#1](https://github.com/Bantila/FarCryCoop/issues/1).
+- **Bunker → Steam crashes the host** (heap corruption during the level change): [#2](https://github.com/Bantila/FarCryCoop/issues/2).
+- The client can arrive late or far from the host after a map change: [#3](https://github.com/Bantila/FarCryCoop/issues/3). A Lua error in the Bunker AI conversations: [#4](https://github.com/Bantila/FarCryCoop/issues/4).
 - To the other players a paraglider that climbs looks as if it falls.
 - No player can push barrels or crates, the host included.
 - Joined players do not see cutscenes; the host's intro cutscene is not verified on every map.
-- No real saves: a server restart starts the map over.
+- Saves keep players, weapons and dead enemies only; after a load the mission script starts from the beginning of the map (triggers, pickups and vehicles are not saved).
 - AI jumps and other animation-driven AI actions do not happen on a dedicated server.
 - In-game chat and console type Latin letters only.
 - PunkBuster stays off; the mod never touches it.
 
 ## Roadmap
 
-1. Verify checkpoints, shirt color, loadout and the lobby "Start" in game with two players.
+1. Fix the crashes: Treehouse and Swamp ([#1](https://github.com/Bantila/FarCryCoop/issues/1)), Bunker → Steam ([#2](https://github.com/Bantila/FarCryCoop/issues/2)), then repeat the level sweep over all 20 levels.
+1a. Verify shirt color, loadout, the lobby "Start" and the F6 / F7 save keys in game with two players.
 2. Steam join with a friend's real second account.
 3. Host admin panel inside the game (ESC menu instead of the console), any player able to start a mission, friendly fire switch: [games/far-cry/PLAN-fun-mode.md](games/far-cry/PLAN-fun-mode.md).
-4. Cutscenes and helicopters for joined players.
-5. Real campaign saves: the host saves and loads, friends come back with them.
+4. Cutscenes for joined players (written, not seen in game) and a real helicopter flight.
+5. Save the mission progress (triggers, objectives, pickups) too.
 6. Player list during the game in the launcher.
 
 ## Building from source
