@@ -470,6 +470,17 @@ function CoopApplyPrefs()
 	end
 end
 
+-- One error in the once-per-second work must not stop the rest of it (the first error per name is logged).
+function CoopRun(name, fn)
+	call(fn, {}, "x", function(msg)
+		COOP_RunErrors = COOP_RunErrors or {};
+		if (not COOP_RunErrors[%name]) then
+			COOP_RunErrors[%name] = 1;
+			System:LogAlways("coop: "..%name.." error: "..tostring(msg));
+		end
+	end);
+end
+
 function GameRules:OnUpdate(DeltaTime)
 	if COOP_PendingMap then -- next level asked for by a mission end (CoopStartLevel)
 		local map = COOP_PendingMap
@@ -479,10 +490,10 @@ function GameRules:OnUpdate(DeltaTime)
 		CoopMap(map)
 		return
 	end
-	CoopPreloadWeapons()
+	CoopRun("preload weapons", CoopPreloadWeapons)
 	COOP_AIPlayers = CoopPlayers() -- for CoopAIPlayer; every frame, players respawn as new entities
-	CoopMonitor("S")
-	CoopUpdateKeys()
+	CoopRun("monitor", function() CoopMonitor("S") end)
+	CoopRun("update keys", CoopUpdateKeys)
 	if COOP_God == 1 then -- coop_god: refill every frame
 		for i, P in CoopPlayers() do
 			if P.cnt.health > 0 then P.cnt.health = P.cnt.max_health; end
@@ -491,16 +502,19 @@ function GameRules:OnUpdate(DeltaTime)
 	-- _time restarts with every map load, but Lua globals survive coop_restart
 	if _time < COOP_NextWake and COOP_NextWake - _time <= 1 then return end
 	COOP_NextWake = _time + 1
+	COOP_Ticks = (COOP_Ticks or 0) + 1 -- once-per-second block ran (read from the console when debugging)
+	-- first, before the unprotected calls below: an error in one of them would end this function and the watch never ran
+	call(CoopTeleWatch, {}, "x", function(msg) System:LogAlways("coop: tele watch error: "..tostring(msg)); end)
 	-- coop_map turned cutscenes off for a dedicated server; a listen host (it has a
 	-- _localplayer) plays the campaign as in single player, cutscenes included
 	if _localplayer then setglobal("mov_NoCutscenes", 0) end
-	CoopWrapBehaviours()
-	CoopWrapHud()
-	CoopWrapReleaseUser()
-	CoopSendVehOut()
+	CoopRun("wrap behaviours", CoopWrapBehaviours)
+	CoopRun("wrap hud", CoopWrapHud)
+	CoopRun("wrap release user", CoopWrapReleaseUser)
+	CoopRun("send veh out", CoopSendVehOut)
 	call(CoopParagliders, {}, "x", function(msg) System:LogAlways("coop: paraglider error: "..tostring(msg)); end)
-	CoopWrapCutsceneMoves()
-	CoopBoatSeats()
+	CoopRun("wrap cutscene moves", CoopWrapCutsceneMoves)
+	CoopRun("boat seats", CoopBoatSeats)
 	call(CoopApplyLoadouts, {}, "x", function(msg) System:LogAlways("coop: loadout error: "..tostring(msg)); end)
 	call(CoopApplyPrefs, {}, "x", function(msg) System:LogAlways("coop: prefs error: "..tostring(msg)); end)
 	call(CoopUpdateBots, {}, "x", function(msg) System:LogAlways("coop: bot error: "..tostring(msg)); end)
@@ -527,6 +541,52 @@ function GameRules:OnUpdate(DeltaTime)
 					call(CoopWake, {e}, "x", CoopWakeError)
 					break
 				end
+			end
+		end
+	end
+end
+
+-- see CoopMovePlayer: resend a move until the remote player is within 6 m of it (at most 8 times, for
+-- 15 s), and move it again if it falls through the ground in the next 8 s; a dead player is waited for. Cleared with every map load (this file runs on each).
+COOP_TeleWatch = {};
+function CoopTeleWatch()
+	for i, slot in Server:GetServerSlotMap() do
+		local id = slot:GetId();
+		local w = COOP_TeleWatch[id];
+		if (w) then
+			local P = System:GetEntity(slot:GetPlayerId());
+			if (_time < w.t or _time - w.t > 15 or w.tries >= 8) then -- second test: _time restarted
+				COOP_TeleWatch[id] = nil;
+			elseif (P and P.cnt and P.cnt.health > 0 and BasicPlayer.IsAlive(P)) then
+				local t = P:GetPos();
+				local dx, dy, dz = t.x - w.pos.x, t.y - w.pos.y, t.z - w.pos.z;
+				if (not w.arrived and dx * dx + dy * dy + dz * dz < 36) then w.arrived = _time; end
+				if (w.arrived) then
+					-- 8 s more: a player put down where the ground has not streamed in on its machine falls
+					-- through it (Training: z -100 a few seconds after the move)
+					if (_time < w.arrived or _time - w.arrived > 8) then
+						COOP_TeleWatch[id] = nil;
+					elseif (t.z < w.pos.z - 10) then
+						w.tries = w.tries + 1;
+						System:LogAlways(format("coop: tele again (%d) for %s: it fell to z %.0f", w.tries, P:GetName(), t.z));
+						if (w.tries >= 2 and _localplayer and _localplayer.id ~= P.id) then -- the spot has no ground for it: use the host's
+							local h = _localplayer:GetPos();
+							w.pos = {x = h.x + 1, y = h.y, z = h.z};
+						end
+						CoopMovePlayer(P, w.pos, w.ang, 1);
+						w.arrived = nil;
+						w.t = _time;
+					end
+				elseif (_time - w.t >= 1.5) then
+					w.tries = w.tries + 1;
+					CoopMonEvent("S", format("tele again (%d) for %s", w.tries, P:GetName()));
+					System:LogAlways(format("coop: tele again (%d) for %s", w.tries, P:GetName()));
+					CoopMovePlayer(P, w.pos, w.ang, 1);
+				end
+			elseif (not w.logged) then -- waiting for the player to be alive: say why, once
+				w.logged = 1;
+				System:LogAlways(format("coop: tele watch waits for %s: hp %s state %s vehicle %s", tostring(P and P:GetName()),
+					tostring(P and P.cnt and P.cnt.health), tostring(P and P.GetState and P:GetState()), tostring(P and P.theVehicle ~= nil)));
 			end
 		end
 	end

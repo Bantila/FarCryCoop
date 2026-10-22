@@ -126,7 +126,7 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 - Helicopters (`Gunship`, `CargoChopper`): a client follows a helicopter once it has moved on the host; before that it hovers up to 34 m higher. A real mission flight (the Boat boss) is not seen.
 - Treehouse and Swamp used to crash at the level load (`CRITICAL ERROR:: ReadPacked i== 20`); the ASI now skips the physics state that the level file bakes into some entities, so those objects start where the level puts them ([#1](https://github.com/Bantila/FarCryCoop/issues/1)).
 - **A level change sometimes crashes the host** (random heap corruption in `CrySystem.dll`; seen on Bunker → Steam and Cooler → Boat, a few in ten): [#2](https://github.com/Bantila/FarCryCoop/issues/2).
-- The client can arrive late or far from the host after a map change: [#3](https://github.com/Bantila/FarCryCoop/issues/3). A Lua error in the Bunker AI conversations: [#4](https://github.com/Bantila/FarCryCoop/issues/4).
+- After a move (a checkpoint hop, a load) a client that missed it is now moved again by the server, also when it falls through the ground ([#3](https://github.com/Bantila/FarCryCoop/issues/3), closed); the Bunker AI conversation error is guarded ([#4](https://github.com/Bantila/FarCryCoop/issues/4), closed). Vehicles with fewer seats than players (Swamp, buggies): [#5](https://github.com/Bantila/FarCryCoop/issues/5).
 - To the other players a paraglider that climbs looks as if it falls.
 - No player can push barrels or crates, the host included.
 - Joined players do not see cutscenes; the host's intro cutscene is not verified on every map.

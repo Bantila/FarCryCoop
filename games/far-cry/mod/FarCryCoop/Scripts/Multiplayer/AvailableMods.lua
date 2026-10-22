@@ -154,13 +154,20 @@ end
 -- A remote player's own game moves it (client-side movement): SetPos on the server did not
 -- move a client at all, so coop_gather / coop_goto / coop_load only ever moved the host.
 -- The client moves its own player ("TELE x y z [ax ay az]", COOP ClientStuff).
-function CoopMovePlayer(P, pos, ang)
+-- The command is sent once, and a client that is loading, dead, in a vehicle or over terrain that has
+-- not streamed in yet missed it or fell through (sweep: Swamp checkpoint 4 left the client 1087 m
+-- away, Volcano checkpoint 3 44 m below). So every move of a remote player is watched
+-- (COOP_TeleWatch, COOP GameRules CoopTeleWatch): the server sends it again until the player is there.
+function CoopMovePlayer(P, pos, ang, retry)
 	P:SetPos(pos);
 	if (ang) then P:SetAngles(ang); end
 	for i, slot in Server:GetServerSlotMap() do
 		if (slot:GetPlayerId() == P.id) then
 			local a = ang and format(" %.2f %.2f %.2f", ang.x, ang.y, ang.z) or "";
 			slot:SendCommand(format("TELE %.2f %.2f %.2f", pos.x, pos.y, pos.z)..a);
+			if (not retry and COOP_TeleWatch and slot:GetPlayerId() ~= (_localplayer and _localplayer.id)) then
+				COOP_TeleWatch[slot:GetId()] = {pos = {x = pos.x, y = pos.y, z = pos.z}, ang = ang and {x = ang.x, y = ang.y, z = ang.z} or nil, tries = 0, t = _time};
+			end
 		end
 	end
 end
