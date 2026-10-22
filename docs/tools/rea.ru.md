@@ -52,6 +52,14 @@ claude mcp add --scope local rea -e "GHIDRA_INSTALL_DIR=$R\Tools\ghidra_12.1.4_P
 
 Имя сервера должно идти до опций `-e` (`-e` принимает несколько значений). `claude mcp get rea` показывает `Connected`; инструменты появляются в новой сессии Claude Code. `rea doctor`: Ghidra 12.1.4 и JDK 21 в порядке; Hopper, IDA, jadx, Kuna не установлены (не нужны).
 
+## Перенесён в пользовательскую область (2026-10-22)
+
+Решение владельца: по репозиторию на игру, поэтому REA зарегистрирован для всех папок. Локальная
+запись удалена (`claude mcp remove rea -s local`), та же команда выполнена с `--scope user` вместо
+`--scope local`. Тот же файл `C:\Users\<user>\.claude.json`, теперь его общий раздел; все пути
+по-прежнему ведут в `E:\FarCryCoop`. `claude mcp get rea` из `E:\FarCryCoop\FarCry3Coop`:
+`Scope: User config`, `Connected`. Удаление: `claude mcp remove rea -s user`.
+
 ## Правила, которые нас касаются
 
 - Правило 2 из AGENTS.md: анализируем только **копию** папки игры, не установку.
