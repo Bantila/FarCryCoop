@@ -586,6 +586,7 @@ static void keyboardUS(void)
 static char g_join[600], g_joinOwn[600]; // Mods\FarCryCoop\join.txt, join_<pid>.txt
 static BYTE(__fastcall *oGameUpdate)(void *, void *);
 static DWORD g_joinTick;
+static int g_coop; // this game ran a CoopMap / CoopLoad / Game:Connect line (see the baked physics states)
 static int g_ownsServer; // this game ran a CoopMap / CoopLoad line: it hosts, the shared join.txt is not its
 static int hasText(const char *s, const char *t)
 {
@@ -614,6 +615,8 @@ static void runJoin(const char *file)
 	cmd[n] = 0;
 	if (hasText(cmd, "CoopMap(") || hasText(cmd, "CoopLoad("))
 		g_ownsServer = 1;
+	if (g_ownsServer || hasText(cmd, "Game:Connect("))
+		g_coop = 1;
 	sys = getISystem();
 	con = sys ? ((void *(__fastcall *)(void *, void *))VFN(sys, 0x60))(sys, 0) : 0;
 	logf("join: %s", cmd);
@@ -670,6 +673,32 @@ static void steamJoin(void)
 // ("ReadPacked i==%i" with i > 16 means the stream is out of step).
 static BYTE *g_phys;
 static void(__cdecl *oPhysErr)(const char *, int, int, int);
+// CryPhysics RVA 0x9c9b0 is the rigid body's SetStateFromSnapshot(CStream &stm, int flags) (thiscall,
+// ret 8; it ends in the ReadPacked reader FUN_3509b880). The hook remembers which physical entity is
+// being read, so the error log can name it: GetForeignData is IPhysicalEntity vtable slot 7, the
+// IEntity's GetId/GetClassId/GetPos are the slots used in netPresenceIfMoved.
+static void *g_phSelf;
+static DWORD g_phRet, g_phFlags; // who called it, and the flags
+// FUN_350c2fd0 (RVA 0xc2fd0..0xc309e) is SetStateFromSnapshotTxt: it turns a text state, baked into a level
+// entity, into a CStream and calls SetStateFromSnapshot. On Treehouse and Swamp that text does not match the
+// reader ("ReadPacked i==20"), and the engine ends the game. Ignoring the errors only moves the crash on
+// (an access violation in the half-read body), so in a co-op game the baked state is not applied at all:
+// the object stays where the level file puts it.
+static DWORD g_bakedSkipped;
+static int(__fastcall *oPhSet)(void *, void *, void *, int);
+static int __fastcall hPhSet(void *self, void *edx, void *stm, int flags)
+{
+	g_phSelf = self;
+	g_phRet = ((DWORD *)&stm)[-1]; // the slot below the first stack argument is the return address
+	g_phFlags = (DWORD)flags;
+	if (g_coop && g_phys && g_phRet >= (DWORD)g_phys + 0xc2fd0 && g_phRet < (DWORD)g_phys + 0xc309e) {
+		g_bakedSkipped++;
+		if (g_bakedSkipped <= 3 || !(g_bakedSkipped & 255))
+			logf("baked physics state skipped (%u so far)", g_bakedSkipped);
+		return 0;
+	}
+	return oPhSet(self, edx, stm, flags);
+}
 static void __cdecl hPhysErr(const char *fmt, int a1, int a2, int a3)
 {
 	DWORD *fp, ret[10];
@@ -683,6 +712,16 @@ static void __cdecl hPhysErr(const char *fmt, int a1, int a2, int a3)
 	}
 	logf("PHYSICS ERROR \"%s\" %d %d; in entity update: %u, entity %u class %u; CryPhysics at %x, CryGame at %x", fmt, a1, a2, g_inUe,
 	     g_ueId, g_ueClass, (DWORD)g_phys, (DWORD)g_base);
+	if (g_phSelf) {
+		void *ent = ((void *(__fastcall *)(void *, void *, int))VFN(g_phSelf, 0x1c))(g_phSelf, 0, 0); // GetForeignData(0)
+		if (ent) {
+			Vec3 *p = ((Vec3 * (__fastcall *)(void *, void *, int))VFN(ent, 0x04))(ent, 0, 1);
+			logf("  physical entity being read: entity %u class %u at %d,%d,%d", ((WORD(__fastcall *)(void *, void *))VFN(ent, 0xc4))(ent, 0),
+			     ((WORD(__fastcall *)(void *, void *))VFN(ent, 0xe8))(ent, 0), (int)p->x, (int)p->y, (int)p->z);
+		} else
+			logf("  physical entity being read: no IEntity (foreign data is null)");
+	}
+	logf("  SetStateFromSnapshot was called from %x with flags %u", g_phRet, g_phFlags);
 	logf("  stack: %x %x %x %x %x %x %x %x %x %x", n > 0 ? ret[0] : 0, n > 1 ? ret[1] : 0, n > 2 ? ret[2] : 0,
 	     n > 3 ? ret[3] : 0, n > 4 ? ret[4] : 0, n > 5 ? ret[5] : 0, n > 6 ? ret[6] : 0, n > 7 ? ret[7] : 0,
 	     n > 8 ? ret[8] : 0, n > 9 ? ret[9] : 0);
@@ -742,6 +781,10 @@ static DWORD __stdcall worker(void *unused)
 		g_phys = (BYTE *)GetModuleHandleA("CryPhysics.dll");
 		if (g_phys)
 			hook(g_phys + 0x52d0, 5, pe, hPhysErr, (void **)&oPhysErr, "CryPhysics error reporter");
+		if (g_phys) {
+			static const BYTE ss[] = {0x81, 0xec, 0xd4, 0x00, 0x00, 0x00}; // sub esp, 0D4h
+			hook(g_phys + 0x9c9b0, 6, ss, hPhSet, (void **)&oPhSet, "CPhysicalEntity rigid SetStateFromSnapshot");
+		}
 		else
 			logf("CryPhysics.dll not loaded, error reporter not hooked");
 	}

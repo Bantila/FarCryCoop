@@ -46,7 +46,7 @@ Far Cry has no official co-op. The campaign already runs as a local server plus 
 | Helicopters | partly | a helicopter that moves on the host is followed by the client; one that has not moved hovers at another height on the client; a real mission flight not seen |
 | Saves | host only | autosave at checkpoints, `coop_save` / `coop_load` (F6 / F7 not tested), start from a save in the launcher; players, weapons and dead enemies, not mission progress |
 | Difficulty | works | launcher or `#CoopDifficulty(n)`; the five levels of the single-player menu |
-| Levels | 18 of 20 | Treehouse and Swamp crash at the load ([#1](https://github.com/Bantila/FarCryCoop/issues/1)); the Bunker → Steam change crashes the host ([#2](https://github.com/Bantila/FarCryCoop/issues/2)) |
+| Levels | 20 of 20 load | Treehouse and Swamp needed a workaround (baked physics states are skipped, [#1](https://github.com/Bantila/FarCryCoop/issues/1)); the Bunker → Steam change crashes the host ([#2](https://github.com/Bantila/FarCryCoop/issues/2)) |
 
 The full research log with every fix, address and test is in [games/far-cry/NOTES.md](games/far-cry/NOTES.md).
 
@@ -124,7 +124,7 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 ## Known limitations
 
 - Helicopters (`Gunship`, `CargoChopper`): a client follows a helicopter once it has moved on the host; before that it hovers up to 34 m higher. A real mission flight (the Boat boss) is not seen.
-- **Treehouse and Swamp crash at the level load** (`CRITICAL ERROR:: ReadPacked i== 20`): [#1](https://github.com/Bantila/FarCryCoop/issues/1).
+- Treehouse and Swamp used to crash at the level load (`CRITICAL ERROR:: ReadPacked i== 20`); the ASI now skips the physics state that the level file bakes into some entities, so those objects start where the level puts them ([#1](https://github.com/Bantila/FarCryCoop/issues/1)).
 - **Bunker → Steam crashes the host** (heap corruption during the level change): [#2](https://github.com/Bantila/FarCryCoop/issues/2).
 - The client can arrive late or far from the host after a map change: [#3](https://github.com/Bantila/FarCryCoop/issues/3). A Lua error in the Bunker AI conversations: [#4](https://github.com/Bantila/FarCryCoop/issues/4).
 - To the other players a paraglider that climbs looks as if it falls.
@@ -137,7 +137,7 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 
 ## Roadmap
 
-1. Fix the crashes: Treehouse and Swamp ([#1](https://github.com/Bantila/FarCryCoop/issues/1)), Bunker → Steam ([#2](https://github.com/Bantila/FarCryCoop/issues/2)), then repeat the level sweep over all 20 levels.
+1. Fix the Bunker → Steam crash ([#2](https://github.com/Bantila/FarCryCoop/issues/2)), then repeat the sweep over all 20 levels in one run (Treehouse, Swamp, Factory, Dam and Volcano were swept after the workaround).
 1a. Verify shirt color, loadout, the lobby "Start" and the F6 / F7 save keys in game with two players.
 2. Steam join with a friend's real second account.
 3. Host admin panel inside the game (ESC menu instead of the console), any player able to start a mission, friendly fire switch: [games/far-cry/PLAN-fun-mode.md](games/far-cry/PLAN-fun-mode.md).
