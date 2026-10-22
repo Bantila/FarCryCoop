@@ -746,11 +746,31 @@ end
 -- Mods\FarCryCoop\save_<name>.lua: map, every player's position, health, armor, weapons and
 -- ammo, which AI are dead, and the respawn point. Loading reloads the map with
 -- LoadLevelMPServer, so joined players stay connected (a load from a fresh game start needs them
--- to join again), removes the dead AI and puts everybody back. Mission scripts, triggers and
--- pickups are not saved: after a load the mission script runs from the start of the map.
--- Static entity ids from the level XML stay the same when the same map reloads, so dead AI are
--- matched by id.
+-- to join again), removes the dead AI and puts everybody back. Static entity ids from the level
+-- XML stay the same when the same map reloads, so entities are matched by id.
+-- Mission state (version 2), what the single-player save keeps too (CXGame::SaveToStream):
+-- the level entities that are gone (picked-up items, removed AI and objects) are removed again;
+-- living AI get their position and health back; triggers, doors and mission hints keep their
+-- state through their own OnSave/OnLoad, called with a stream that writes into the save table
+-- (CoopStm); hidden entities (COOP_HideState) and the mission objectives come back. Not saved: the
+-- Mission table's own variables and AI behaviour states (the engine save does not have them
+-- either, or keeps them in its AI chunk).
 COOP_SAVE_PATH = "Mods/FarCryCoop/save_";
+COOP_STATIC_IDS = 32768 -- ponytail: level entities have small ids, dynamic ones (players, spawned) are given from 65535 down
+-- classes whose OnSave/OnLoad only keep mission flags (read in the game scripts); players, AI and
+-- vehicles have their own, heavier ones, and are left out
+COOP_SAVE_CLASSES = {AreaTrigger = 1, ProximityTrigger = 1, ProximityKeyTrigger = 1, DelayTrigger = 1, MultipleTrigger = 1,
+	AITrigger = 1, VisibilityTrigger = 1, Door = 1, AutomaticDoor = 1, MissionHint = 1}
+
+-- a stand-in for the CStream that OnSave/OnLoad get in single player: values go into t[1..n]
+function CoopStm(t)
+	local put = function(self, v) self.n = self.n + 1; self.t[self.n] = v; end
+	local get = function(self) self.n = self.n + 1; return self.t[self.n]; end
+	return {t = t or {}, n = 0, WriteInt = put, WriteFloat = put, WriteString = put, WriteByte = put,
+		WriteBool = function(self, v) %put(self, (v and v ~= 0) and 1 or 0); end,
+		ReadInt = get, ReadFloat = get, ReadString = get, ReadByte = get,
+		ReadBool = function(self) local v = %get(self); if (v and v ~= 0) then return 1; end end};
+end
 
 function CoopSer(v)
 	local t = type(v);
@@ -776,7 +796,8 @@ function CoopSave(name)
 	if (not Game:IsServer()) then return; end
 	if (not COOP_Map) then System:LogAlways("coop_save: no co-op map running"); return; end
 	if (strfind(name, "[^%w_]")) then System:LogAlways("coop_save: the name may have only letters, digits and _"); return; end
-	local save = {version = 1, map = COOP_Map, name = name, difficulty = COOP_Difficulty, players = {}, dead = {}};
+	local save = {version = 2, map = COOP_Map, name = name, difficulty = COOP_Difficulty, players = {}, dead = {},
+		present = {}, ai = {}, state = {}, hidden = new(COOP_HideState), objectives = {}, radar = Hud and Hud.COOP_Radar};
 	if (date) then save.date = date("%Y-%m-%d %H:%M"); end
 	for i, P in CoopPlayers() do
 		local t, a = P:GetPos(), P:GetAngles();
@@ -790,6 +811,20 @@ function CoopSave(name)
 	local nd = 0;
 	for i, e in System:GetEntities() do
 		if (e.ai and e.cnt and e.cnt.health and e.cnt.health <= 0) then nd = nd + 1; save.dead[nd] = e.id; end
+		if (e.id < COOP_STATIC_IDS) then
+			save.present[e.id] = 1;
+			if (e.ai and e.cnt and e.cnt.health and e.cnt.health > 0) then
+				local p, a = e:GetPos(), e:GetAngles();
+				save.ai[e.id] = {x = p.x, y = p.y, z = p.z, a = a.z, h = e.cnt.health};
+			elseif (COOP_SAVE_CLASSES[e.classname] and e.OnSave) then
+				local stm = CoopStm();
+				e:OnSave(stm);
+				save.state[e.id] = {n = stm.n, v = stm.t};
+			end
+		end
+	end
+	for i, o in (Hud and Hud.objectives or {}) do
+		if (type(o) == "table" and o.text) then save.objectives[getn(save.objectives) + 1] = {text = o.text, done = o.completed}; end
 	end
 	if (_LastCheckPPos) then
 		save.check = {pos = new(_LastCheckPPos), ang = _LastCheckPAngles and new(_LastCheckPAngles) or nil};
@@ -851,6 +886,7 @@ function CoopApplyLoad()
 		local e = System:GetEntity(save.dead[i]);
 		if (e and e.ai) then Server:RemoveEntity(e.id); end
 	end
+	if (save.present) then CoopApplyMissionState(save); end
 	for i, P in list do
 		local s = save.players[i] or save.players[1];
 		CoopMovePlayer(P, s.pos, s.ang);
@@ -862,6 +898,49 @@ function CoopApplyLoad()
 	_LastCheckPPos = new(c.pos);
 	if (c.ang) then _LastCheckPAngles = new(c.ang); end
 	CoopSaveMessage(format("loaded %s: %d players, %d dead AI removed", tostring(save.name), getn(list), getn(save.dead)));
+end
+
+-- the mission state of a version 2 save, on the freshly loaded map (see CoopSave)
+function CoopApplyMissionState(save)
+	local gone, n = {}, 0;
+	for i, e in System:GetEntities() do
+		if (e.id < COOP_STATIC_IDS and not save.present[e.id] and e.type ~= "Player") then n = n + 1; gone[n] = e.id; end
+	end
+	for i = 1, n do Server:RemoveEntity(gone[i]); end
+	for id, a in save.ai do
+		local e = System:GetEntity(id);
+		if (e and e.ai and e.cnt) then
+			e:SetPos({x = a.x, y = a.y, z = a.z});
+			e:SetAngles({x = 0, y = 0, z = a.a});
+			e.cnt.health = a.h;
+		end
+	end
+	local ns = 0;
+	for id, st in save.state do
+		local e = System:GetEntity(id);
+		if (e and e.OnLoad and COOP_SAVE_CLASSES[e.classname]) then
+			local stm = CoopStm(st.v);
+			call(e.OnLoad, {e, stm}, "x", function(msg) System:LogAlways("coop: load state of "..%e:GetName()..": "..tostring(msg)); end);
+			ns = ns + 1;
+		end
+	end
+	for id, v in (save.hidden or {}) do
+		local e = System:GetEntity(id);
+		if (e) then
+			if (not e.COOP_HideWrapped) then CoopWrapHide(e); end
+			local ev = (v == 1) and e.Event_Hide or e.Event_UnHide; -- wrapped: tells the clients (HIDE)
+			if (ev) then ev(e, e); else e:Hide(v); end
+		end
+	end
+	if (Hud and save.objectives) then
+		Hud:FlashObjectives(); -- wrapped (CoopWrapHud): the clients get the same list
+		for i, o in save.objectives do
+			Hud:PushObjective({}, o.text);
+			if (o.done) then Hud:CompleteObjective(o.text); end
+		end
+		if (save.radar) then Hud:SetRadarObjective(save.radar); end
+	end
+	CoopSaveMessage(format("mission state: %d entities removed, %d states restored, %d objectives", n, ns, getn(save.objectives or {})));
 end
 
 -- Movie sequences (e.g. the heli fly-by on Pier, started by a ProximityTrigger) play only on

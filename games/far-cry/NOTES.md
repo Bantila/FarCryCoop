@@ -229,6 +229,16 @@ The engine's `CXGame::Save` and `LoadFromStream` return early in multiplayer, so
 
 Verified in game (Pier, two games on one PC): `CoopSave`, then `CoopTeleport` 60 m away, then `CoopLoad`: the host and the client are back on the saved spot; a checkpoint creates `save_auto.lua`; the launcher starts a game from `save:t2` and both players appear on the saved spot. Not verified: the F6/F7 keys (no keyboard in the test), the single-player "Load Game" menu (not connected: it loads single-player saves), a long mission played through after a load.
 
+**Mission state in saves (version 2, 2026-10-22).** A save now also keeps what the single-player save keeps for the mission (`CXGame::SaveToStream` writes every entity's state, its hidden flag and calls its script `OnSave`):
+- **Gone level entities.** The ids of the level entities (static ids, below 32768) that exist at save time. After the load, every level entity that was not there is removed again: picked-up items (a pickup without respawn removes itself), removed AI, objects.
+- **Living AI.** Their position, heading and health.
+- **Triggers, doors, mission hints.** `AreaTrigger`, `ProximityTrigger`, `ProximityKeyTrigger`, `DelayTrigger`, `MultipleTrigger`, `AITrigger`, `VisibilityTrigger`, `Door`, `AutomaticDoor`, `MissionHint` keep their state through their own `OnSave`/`OnLoad`. These are called with `CoopStm`, a stand-in for the stream that writes the values into the save table. A fired once-only trigger stays fired, so the mission does not repeat it.
+- **Hidden entities** (`COOP_HideState`, restored through the wrapped `Event_Hide`/`Event_UnHide`, so clients follow) and the **mission objectives** (restored through the wrapped Hud: the clients get the same list).
+
+Old saves (version 1) still load as before. Not saved: the level script's own `Mission` variables, AI behaviours, vehicles, and players, AI and vehicles' own `OnSave` (heavier, left out).
+
+Checked on Training with two games: an item removed, a `ProximityTrigger` and an `AreaTrigger` set as fired, an AI moved 7 m with 42 health, two objectives (one completed). Then `CoopSave` and `CoopLoad`. After the reload the entity tables are new (a mark set before the save is gone), and everything is back: the item stays gone (on the client too), both triggers fired, the AI on the saved spot with 42 health, and the objectives on the host and the client. Log: `mission state: 1 entities removed, 145 states restored, 2 objectives`. Seen once: `loaded t5: 1 players`, i.e. the load was applied before the client had respawned, so the client was not put on its saved spot (this was so before as well).
+
 ## Spike 12 — difficulty, level sweep, helicopters (2026-10-22)
 
 **Difficulty.** `#CoopDifficulty(n)` (n = 0 easy, 1 medium, 2 challenging, 3 veteran, 4 realistic, or a name; also `coop_difficulty`) sets the same globals as the single-player menu (`UI.PageCampaign:SetAIDifficulty` in `Campaign.lua`: `game_Accuracy`, `game_Aggression`, `game_Health`, `ai_SOM_SPEED`, `game_DifficultyLevel`). A co-op game never goes through that menu, so the mod sets them: in `CoopMap` from `COOP_Difficulty`, which the launcher puts in front of the console line. Enemies read it when they spawn: `coop_restart` after a change. Saves keep it. Checked in game: the launcher's "Veteran" gave `game_Accuracy 1.1`, `game_Health 1.2`. The launcher's map list is in story order (`DEFIANT` in `defiant.lua`).
@@ -294,7 +304,7 @@ Findings:
 2. **Re-run the level sweep** after that (it needs the sweep script to survive a dead level): whether the late-client cases of the first sweep (Control, Pier, Fort) are gone after the teleport watch, Factory, Dam and Volcano in a row.
 2a. Done: the checkpoint hops work on every level checked in Spike 12 and the host autosaves at the save triggers; difficulty and the story-order map list (Spike 12). Not seen: a client respawning at a checkpoint after death, the intro cutscene for the host.
 3. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks); then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
-4. Campaign saves: done as a Lua save (Spike 11). Left: mission state, triggers and pickups are not saved; try the engine's own saves (option A) only if that matters.
+4. Campaign saves: done as a Lua save (Spike 11), with the mission state since version 2 (triggers, doors, gone items and AI, living AI, objectives). Left: the `Mission` variables, vehicles, a client that respawns after the load is applied; try the engine's own saves (option A) only if that matters.
 4a. Cutscenes for joined players (implemented, not seen in game) and a real helicopter flight (the Boat boss); the sync path itself works (Spike 12). Enemies on the client move fine (owner); the short console commands are dropped.
 5. Joining without Steam or a VPN: join code, UDP hole punching and a relay (crysis-coop idea above).
 6. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).

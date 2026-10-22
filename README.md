@@ -45,7 +45,7 @@ Far Cry has no official co-op. The campaign already runs as a local server plus 
 | Paraglider | works | a copy appears for each next player; to others a climbing glider looks as if it falls |
 | Buggies and boats (2 seats) | works (tested with 2 games) | a copy appears on the start spot when the players do not fit |
 | Helicopters | partly | a helicopter that moves on the host is followed by the client; one that has not moved hovers at another height on the client; a real mission flight not seen |
-| Saves | host only | autosave at checkpoints, `coop_save` / `coop_load` (F6 / F7 not tested), start from a save in the launcher; players, weapons and dead enemies, not mission progress |
+| Saves | host only | autosave at checkpoints, `coop_save` / `coop_load` (F6 / F7 not tested), start from a save in the launcher; players, weapons, enemies, triggers, doors, picked-up items and objectives |
 | Difficulty | works | launcher or `#CoopDifficulty(n)`; the five levels of the single-player menu |
 | Levels | 20 of 20 load | Treehouse and Swamp needed a workaround (baked physics states are skipped, [#1](https://github.com/Bantila/FarCryCoop/issues/1)); a level change sometimes crashes the host (3 of 11 runs on Bunker → Steam, 4 of 25 on Cooler → Boat, [#2](https://github.com/Bantila/FarCryCoop/issues/2)) |
 
@@ -131,7 +131,7 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 - To the other players a paraglider that climbs looks as if it falls.
 - No player can push barrels or crates, the host included.
 - Joined players do not see cutscenes; the host's intro cutscene is not verified on every map.
-- Saves keep players, weapons and dead enemies only; after a load the mission script starts from the beginning of the map (triggers, pickups and vehicles are not saved).
+- Saves do not keep vehicles or the level script's own variables; after a load the level script runs again from the start of the map, but fired triggers stay fired.
 - AI jumps and other animation-driven AI actions do not happen on a dedicated server.
 - In-game chat and console type Latin letters only.
 - PunkBuster stays off; the mod never touches it.
@@ -143,8 +143,7 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 2. Steam join with a friend's real second account.
 3. Host admin panel inside the game (ESC menu instead of the console), any player able to start a mission, friendly fire switch: [games/far-cry/PLAN-fun-mode.md](games/far-cry/PLAN-fun-mode.md).
 4. Cutscenes for joined players (written, not seen in game) and a real helicopter flight.
-5. Save the mission progress (triggers, objectives, pickups) too.
-6. Player list during the game in the launcher.
+5. Player list during the game in the launcher.
 
 ## Building from source
 
