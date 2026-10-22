@@ -40,7 +40,7 @@ Far Cry has no official co-op. The campaign already runs as a local server plus 
 | Shirt color | works | 10 colors from the launcher; other players use the multiplayer Jack model, which has the color mask |
 | Loadout | in testing | 4 of 11 weapons, chosen in the launcher; the host turns it on |
 | Lobby | in testing | player list with colors and loadouts; "Start" not yet tried with two games |
-| Join through Steam friends | in testing | bridge runs as Spacewar (AppID 480) |
+| Join through Steam friends | in testing | the bridge runs as Spacewar (AppID 480): its start, Steam login, the "connect" presence and a joining game through the tunnel are checked on one PC; a real friend's Join is not |
 | Cutscenes | partly | the host sees them; joined players do not |
 | Paraglider | works | a copy appears for each next player; to others a climbing glider looks as if it falls |
 | Helicopters | partly | a helicopter that moves on the host is followed by the client; one that has not moved hovers at another height on the client; a real mission flight not seen |

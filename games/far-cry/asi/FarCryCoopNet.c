@@ -586,6 +586,18 @@ static void keyboardUS(void)
 static char g_join[600], g_joinOwn[600]; // Mods\FarCryCoop\join.txt, join_<pid>.txt
 static BYTE(__fastcall *oGameUpdate)(void *, void *);
 static DWORD g_joinTick;
+static int g_ownsServer; // this game ran a CoopMap / CoopLoad line: it hosts, the shared join.txt is not its
+static int hasText(const char *s, const char *t)
+{
+	int i, j;
+	for (i = 0; s[i]; i++) {
+		for (j = 0; t[j] && s[i + j] == t[j]; j++)
+			;
+		if (!t[j])
+			return 1;
+	}
+	return 0;
+}
 static void runJoin(const char *file)
 {
 	char cmd[512];
@@ -600,6 +612,8 @@ static void runJoin(const char *file)
 	while (n && (cmd[n - 1] == '\r' || cmd[n - 1] == '\n'))
 		n--;
 	cmd[n] = 0;
+	if (hasText(cmd, "CoopMap(") || hasText(cmd, "CoopLoad("))
+		g_ownsServer = 1;
 	sys = getISystem();
 	con = sys ? ((void *(__fastcall *)(void *, void *))VFN(sys, 0x60))(sys, 0) : 0;
 	logf("join: %s", cmd);
@@ -613,7 +627,7 @@ static BYTE __fastcall hGameUpdate(void *game, void *edx)
 	if (GetTickCount() - g_joinTick > 500) {
 		g_joinTick = GetTickCount();
 		runJoin(g_joinOwn);
-		if (!hosting()) // a host leaves the shared file to the other window (bridge -loop)
+		if (!hosting() && !g_ownsServer) // a host leaves the shared file to the other window (bridge -loop)
 			runJoin(g_join);
 	}
 	return r;
