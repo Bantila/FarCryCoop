@@ -138,7 +138,7 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 
 ## Roadmap
 
-1. Find the random crash on a level change ([#2](https://github.com/Bantila/FarCryCoop/issues/2)), then repeat the sweep over all 20 levels in one run (Treehouse, Swamp, Factory, Dam and Volcano were swept after the workaround).
+1. The random crash on a level change is fixed ([#2](https://github.com/Bantila/FarCryCoop/issues/2)); repeat the sweep over all 20 levels in one run (Treehouse, Swamp, Factory, Dam and Volcano were swept after the workaround).
 1a. Verify shirt color, loadout, the lobby "Start" and the F6 / F7 save keys in game with two players.
 2. Steam join with a friend's real second account.
 3. Host admin panel inside the game (ESC menu instead of the console), any player able to start a mission, friendly fire switch: [games/far-cry/PLAN-fun-mode.md](games/far-cry/PLAN-fun-mode.md).
