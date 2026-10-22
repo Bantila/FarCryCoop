@@ -607,7 +607,7 @@ static int hasText(const char *s, const char *t)
 }
 static void runJoin(const char *file)
 {
-	char cmd[512];
+	static char cmd[4096]; // a console line from join_<pid>.txt (test scripts send long Lua lines); static: no __chkstk without the CRT, main thread only
 	DWORD n = 0;
 	void *sys, *con;
 	HANDLE f = CreateFileA(file, 0x80000000, 0, 0, 3, 0x80, 0); // GENERIC_READ, OPEN_EXISTING
