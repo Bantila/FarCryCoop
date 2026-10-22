@@ -244,7 +244,24 @@ end
 if (not COOP_AIErrors) then COOP_AIErrors = {}; end
 
 -- behaviours load on demand, so this runs once a second for new ones
+-- AIBehaviour.DEFAULT.CONVERSATION_REQUEST(_INPLACE) index sender.CurrentConversation, which is nil
+-- when the sender's conversation ended before the signal arrived (the original game has the same
+-- race; with the wrapper below it showed up as one "attempt to index field `CurrentConversation'")
+function CoopGuardConversation(b, fname)
+	local old = b[fname];
+	if (type(old) ~= "function") then return; end
+	b[fname] = function(self, entity, sender)
+		if (sender and not sender.CurrentConversation) then return; end
+		return %old(self, entity, sender);
+	end
+end
+
 function CoopWrapBehaviours()
+	local d = AIBehaviour.DEFAULT;
+	if (type(d) == "table" and not d.COOP_Wrapped) then -- before the loop below wraps every function
+		CoopGuardConversation(d, "CONVERSATION_REQUEST");
+		CoopGuardConversation(d, "CONVERSATION_REQUEST_INPLACE");
+	end
 	for bname, b in AIBehaviour do
 		if (type(b) == "table" and not b.COOP_Wrapped) then
 			b.COOP_Wrapped = 1;
