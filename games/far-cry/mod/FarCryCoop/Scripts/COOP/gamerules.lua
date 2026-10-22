@@ -140,40 +140,68 @@ function CoopSendVehOut()
 	COOP_VehOut = {};
 end
 
--- A paraglider has one seat: the first player to reach it flew, the others had nothing to fly.
--- Pier and Boat have 2 of them, Rebellion 3, each at its own launch spot. Once one is taken and
--- no free one is left at its start spot (remembered while it was free), spawn another one there,
--- up to one per player at that spot. The level's own gliders keep their mission events
--- (DriverIn); the copies are only for getting down. ponytail: copies are never removed
-function CoopParagliders()
-	local gliders = {};
-	for i, e in System:GetEntities() do
-		if (e.classname == "Paraglider" and e.driverT) then
-			if (not e.COOP_Start and not e.driverT.entity) then
-				e.COOP_Start = {pos = new(e:GetPos()), ang = new(e:GetAngles())};
-			end
-			if (e.COOP_Start) then gliders[getn(gliders) + 1] = e; end
-		end
+-- Vehicles with fewer seats than players (issue #5). A paraglider has one seat, a buggy or a boat
+-- two (InflatableBoat after CoopBoatSeats): the first players to reach them rode, the others had
+-- nothing. Once players sit in one and every seat is taken, and no vehicle of that class at its
+-- start spot (remembered while it was empty) has a free seat, spawn a copy on that spot, until the
+-- vehicles that started there have a seat for every player. Only once the spot is clear (nothing
+-- of that class within 6 m): a car spawned inside one that is still standing there would blow up.
+-- Paraglider: Pier and Boat have 2, Rebellion 3, each at its own launch spot. The level's own
+-- vehicles keep their mission events (DriverIn, PlayerEntered); the copies are only for getting
+-- around. Not copied: FWDVehicle (7 seats; Swamp's Val4WD is one: AI driver, gunner and 5
+-- passengers), Bigtrack (10), Forklift (mission puzzles). ponytail: copies are never removed
+COOP_COPY_CLASSES = {Paraglider = 1, Buggy = 1, Boat = 1, InflatableBoat = 1}
+function CoopSeatList(e)
+	local t = {e.driverT};
+	if (e.gunnerT) then t[getn(t) + 1] = e.gunnerT; end
+	for i = 1, (e.passengerLimit or 0) do
+		if (e.passengersTT and e.passengersTT[i]) then t[getn(t) + 1] = e.passengersTT[i]; end
 	end
-	for i = 1, getn(gliders) do
-		local taken = gliders[i];
-		if (taken.driverT.entity) then
-			local s, free, here = taken.COOP_Start.pos, 0, 0;
-			for j = 1, getn(gliders) do
-				local q = gliders[j].COOP_Start.pos;
-				if ((q.x-s.x)*(q.x-s.x) + (q.y-s.y)*(q.y-s.y) + (q.z-s.z)*(q.z-s.z) < 400) then -- same spot (20 m)
-					here = here + 1;
-					if (not gliders[j].driverT.entity) then free = free + 1; end
+	return t;
+end
+function CoopVehicleCopies()
+	local cars, players = {}, getn(CoopPlayers());
+	for i, e in System:GetEntities() do
+		if (COOP_COPY_CLASSES[e.classname] and e.driverT) then
+			local seats, used, mine = CoopSeatList(e), 0, 0;
+			for j = 1, getn(seats) do
+				local p = seats[j].entity;
+				if (p) then
+					used = used + 1;
+					if (p.classname == "Player") then mine = 1; end
 				end
 			end
-			if (free == 0 and here < getn(CoopPlayers())) then
-				local g = Server:SpawnEntity("Paraglider");
-				if (not g) then System:LogAlways("coop: could not spawn a paraglider"); return; end
-				g:SetPos(s);
-				g:SetAngles(taken.COOP_Start.ang);
+			if (not e.COOP_Start and used == 0) then
+				e.COOP_Start = {pos = new(e:GetPos()), ang = new(e:GetAngles())};
+			end
+			if (e.COOP_Start) then cars[getn(cars) + 1] = {e = e, seats = getn(seats), free = getn(seats) - used, mine = mine}; end
+		end
+	end
+	for i = 1, getn(cars) do
+		local taken = cars[i];
+		if (taken.mine == 1 and taken.free == 0) then
+			local s, free, here, clear = taken.e.COOP_Start.pos, 0, 0, 1;
+			for j = 1, getn(cars) do
+				local c = cars[j];
+				if (c.e.classname == taken.e.classname) then
+					local q = c.e.COOP_Start.pos;
+					if ((q.x-s.x)*(q.x-s.x) + (q.y-s.y)*(q.y-s.y) + (q.z-s.z)*(q.z-s.z) < 400) then -- same spot (20 m)
+						here = here + c.seats;
+						free = free + c.free;
+					end
+					q = c.e:GetPos();
+					if ((q.x-s.x)*(q.x-s.x) + (q.y-s.y)*(q.y-s.y) + (q.z-s.z)*(q.z-s.z) < 36) then clear = nil; end -- 6 m
+				end
+			end
+			if (free == 0 and here < players and clear) then
+				-- the position goes with the spawn: a SetPos after it did not reach the clients (they saw
+				-- the copy at 0,0: an empty vehicle sends no updates)
+				local g = Server:SpawnEntity(taken.e.classname, s);
+				if (not g) then System:LogAlways("coop: could not spawn a "..taken.e.classname); return; end
+				g:SetAngles(taken.e.COOP_Start.ang);
 				g:EnableSave(0);
-				g.COOP_Start = taken.COOP_Start;
-				CoopMonEvent("S", "paraglider copy "..g:GetName().." at "..taken:GetName());
+				g.COOP_Start = taken.e.COOP_Start;
+				CoopMonEvent("S", "vehicle copy "..g:GetName().." ("..taken.e.classname..") at "..taken.e:GetName());
 				return; -- one per second; the new one is free until someone takes it
 			end
 		end
@@ -512,7 +540,7 @@ function GameRules:OnUpdate(DeltaTime)
 	CoopRun("wrap hud", CoopWrapHud)
 	CoopRun("wrap release user", CoopWrapReleaseUser)
 	CoopRun("send veh out", CoopSendVehOut)
-	call(CoopParagliders, {}, "x", function(msg) System:LogAlways("coop: paraglider error: "..tostring(msg)); end)
+	CoopRun("vehicle copies", CoopVehicleCopies)
 	CoopRun("wrap cutscene moves", CoopWrapCutsceneMoves)
 	CoopRun("boat seats", CoopBoatSeats)
 	call(CoopApplyLoadouts, {}, "x", function(msg) System:LogAlways("coop: loadout error: "..tostring(msg)); end)

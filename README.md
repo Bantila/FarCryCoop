@@ -43,6 +43,7 @@ Far Cry has no official co-op. The campaign already runs as a local server plus 
 | Join through Steam friends | in testing | the bridge runs as Spacewar (AppID 480): its start, Steam login, the "connect" presence and a joining game through the tunnel are checked on one PC; a real friend's Join is not |
 | Cutscenes | partly | the host sees them; joined players do not |
 | Paraglider | works | a copy appears for each next player; to others a climbing glider looks as if it falls |
+| Buggies and boats (2 seats) | works (tested with 2 games) | a copy appears on the start spot when the players do not fit |
 | Helicopters | partly | a helicopter that moves on the host is followed by the client; one that has not moved hovers at another height on the client; a real mission flight not seen |
 | Saves | host only | autosave at checkpoints, `coop_save` / `coop_load` (F6 / F7 not tested), start from a save in the launcher; players, weapons and dead enemies, not mission progress |
 | Difficulty | works | launcher or `#CoopDifficulty(n)`; the five levels of the single-player menu |
