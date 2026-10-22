@@ -46,7 +46,7 @@ English version: [README.md](README.md)
 | Вертолёты | частично | вертолёт, который двигается у хоста, клиент повторяет; ещё не двигавшийся висит у клиента на другой высоте; настоящий полёт в миссии не видел |
 | Сохранения | только у хоста | автосейв на чекпоинтах, `coop_save` / `coop_load` (F6 / F7 не проверены), старт из сохранения в лаунчере; игроки, оружие и убитые враги, без хода миссии |
 | Сложность | работает | лаунчер или `#CoopDifficulty(n)`; пять уровней меню одиночной игры |
-| Уровни | 20 из 20 грузятся | Treehouse и Swamp потребовали обхода (запечённые состояния физики пропускаются, [#1](https://github.com/Bantila/FarCryCoop/issues/1)); смена Bunker → Steam роняет хоста ([#2](https://github.com/Bantila/FarCryCoop/issues/2)) |
+| Уровни | 20 из 20 грузятся | Treehouse и Swamp потребовали обхода (запечённые состояния физики пропускаются, [#1](https://github.com/Bantila/FarCryCoop/issues/1)); смена уровня иногда роняет хоста (3 из 11 запусков на Bunker → Steam, 4 из 25 на Cooler → Boat, [#2](https://github.com/Bantila/FarCryCoop/issues/2)) |
 
 Полный журнал исследования со всеми фиксами, адресами и проверками: [games/far-cry/NOTES.ru.md](games/far-cry/NOTES.ru.md).
 
@@ -125,7 +125,7 @@ English version: [README.md](README.md)
 
 - Вертолёты (`Gunship`, `CargoChopper`): клиент повторяет вертолёт, как только тот сдвинулся у хоста; до этого он висит до 34 м выше. Настоящий полёт в миссии (босс на Boat) не видел.
 - Treehouse и Swamp раньше падали при загрузке уровня (`CRITICAL ERROR:: ReadPacked i== 20`); теперь ASI пропускает состояние физики, запечённое в файле уровня у некоторых сущностей, и эти объекты стоят там, где их ставит уровень ([#1](https://github.com/Bantila/FarCryCoop/issues/1)).
-- **Bunker → Steam роняет хоста** (порча кучи при смене уровня): [#2](https://github.com/Bantila/FarCryCoop/issues/2).
+- **Смена уровня иногда роняет хоста** (случайная порча кучи в `CrySystem.dll`; замечена на Bunker → Steam и Cooler → Boat, несколько раз из десяти): [#2](https://github.com/Bantila/FarCryCoop/issues/2).
 - После смены карты клиент может прийти поздно или далеко от хоста: [#3](https://github.com/Bantila/FarCryCoop/issues/3). Ошибка Lua в разговорах ИИ на Bunker: [#4](https://github.com/Bantila/FarCryCoop/issues/4).
 - Другим игрокам дельтаплан, набирающий высоту, кажется падающим.
 - Ни один игрок не может толкать бочки и ящики, включая хоста.
@@ -137,7 +137,7 @@ English version: [README.md](README.md)
 
 ## Планы
 
-1. Исправить падение Bunker → Steam ([#2](https://github.com/Bantila/FarCryCoop/issues/2)), затем повторить обход всех 20 уровней за один прогон (Treehouse, Swamp, Factory, Dam и Volcano обойдены после обхода проблемы).
+1. Найти случайное падение при смене уровня ([#2](https://github.com/Bantila/FarCryCoop/issues/2)), затем повторить обход всех 20 уровней за один прогон (Treehouse, Swamp, Factory, Dam и Volcano обойдены после обхода проблемы).
 1a. Проверить в игре вдвоём цвет рубашки, выкладку, «Начать» в лобби и клавиши сохранения F6 / F7.
 2. Вход через Steam с настоящим вторым аккаунтом друга.
 3. Панель хоста внутри игры (меню ESC вместо консоли), запуск любой миссии любым игроком, переключатель огня по своим: [games/far-cry/PLAN-fun-mode.ru.md](games/far-cry/PLAN-fun-mode.ru.md).

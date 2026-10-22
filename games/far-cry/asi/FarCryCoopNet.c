@@ -642,8 +642,20 @@ static long __stdcall onFault(void **info) // EXCEPTION_POINTERS
 {
 	DWORD *rec = (DWORD *)info[0], *ctx = (DWORD *)info[1];
 	if (rec[0] == 0xc0000005 && g_faults++ < 5) // access violations only (C++ throws are normal); CONTEXT.Esp at +0xc4
+		{
 		logf("exception %x at %x (%u %x) esp %x [%x %x %x %x]", rec[0], rec[3], rec[5], rec[6], ctx[0xc4 / 4],
 			((DWORD *)ctx[0xc4 / 4])[0], ((DWORD *)ctx[0xc4 / 4])[1], ((DWORD *)ctx[0xc4 / 4])[2], ((DWORD *)ctx[0xc4 / 4])[3]);
+		{ // the words of the stack that look like code in the game's DLLs (0x30000000-0x38000000): who called
+			DWORD *sp = (DWORD *)ctx[0xc4 / 4], hit[24];
+			int i, n = 0;
+			for (i = 0; i < 400 && n < 24; i++)
+				if (sp[i] >= 0x30000000 && sp[i] < 0x38000000)
+					hit[n++] = sp[i];
+			for (i = 0; i < n; i += 6)
+				logf("  code on the stack: %x %x %x %x %x %x", hit[i], i + 1 < n ? hit[i + 1] : 0, i + 2 < n ? hit[i + 2] : 0,
+				     i + 3 < n ? hit[i + 3] : 0, i + 4 < n ? hit[i + 4] : 0, i + 5 < n ? hit[i + 5] : 0);
+		}
+		}
 	return 0; // EXCEPTION_CONTINUE_SEARCH
 }
 static void steamJoin(void)
