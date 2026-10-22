@@ -10,7 +10,8 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 # Imported functions: name = bytes of stdcall arguments.
 $imports = [ordered]@{
   kernel32 = [ordered]@{ GetModuleHandleA = 4; GetModuleFileNameA = 12; VirtualAlloc = 16; VirtualProtect = 16
-    FlushInstructionCache = 12; GetCurrentProcess = 0; GetCurrentProcessId = 0; CreateThread = 24; Sleep = 4
+    FlushInstructionCache = 12; GetCurrentProcess = 0; GetCurrentProcessId = 0; GetCurrentThreadId = 0
+    InitializeCriticalSection = 4; EnterCriticalSection = 4; LeaveCriticalSection = 4; TryEnterCriticalSection = 4; CreateThread = 24; Sleep = 4
     CreateFileA = 28; WriteFile = 20; ReadFile = 20; CloseHandle = 4; DeleteFileA = 4; AddVectoredExceptionHandler = 8; GetTickCount = 0; DisableThreadLibraryCalls = 4; lstrcmpiA = 8 }
   user32 = [ordered]@{ wvsprintfA = 12; LoadKeyboardLayoutA = 8; GetKeyboardLayout = 4 }
   winmm = [ordered]@{ timeBeginPeriod = 4 }

@@ -10,6 +10,7 @@
 //   GameWarning                       0x3307019e (both; catches "Updated but not spawned")
 //   CMovieUser::Begin/EndCutScene     0x330cfd25 / 0x330cfed6 (dedicated server: skipped, it has no input)
 //   CryMovie.dll sound track key      0x3401a396 (skipped when there is no sound system)
+//   CrySystem.dll node alloc / free   0x36505c27 / 0x365055c8 (under a lock: the sound thread uses them too)
 // Fix: sorts the snapshot entity list by priority and keeps each snapshot under the 8992-bit
 // unreliable buffer of CryNetwork, so nothing is dropped and held-back entities rotate in.
 // Built without the Windows SDK and CRT (none on this PC outside drive C:), see build.ps1.
@@ -29,6 +30,11 @@ API(BOOL) VirtualProtect(void *, DWORD, DWORD, DWORD *);
 API(BOOL) FlushInstructionCache(HANDLE, const void *, DWORD);
 API(HANDLE) GetCurrentProcess(void);
 API(DWORD) GetCurrentProcessId(void);
+API(DWORD) GetCurrentThreadId(void);
+API(void) InitializeCriticalSection(void *);
+API(void) EnterCriticalSection(void *);
+API(void) LeaveCriticalSection(void *);
+API(BOOL) TryEnterCriticalSection(void *);
 API(HANDLE) CreateThread(void *, DWORD, DWORD(__stdcall *)(void *), void *, DWORD, DWORD *);
 API(void) Sleep(DWORD);
 API(HANDLE) CreateFileA(const char *, DWORD, DWORD, void *, DWORD, DWORD, HANDLE);
@@ -740,6 +746,40 @@ static void __cdecl hPhysErr(const char *fmt, int a1, int a2, int a3)
 	oPhysErr(fmt, a1, a2, a3);
 }
 
+// FIX 12 (issue #2): CrySystem's STLport node allocator (blocks up to 128 bytes: alloc FUN_36505c27(n),
+// free FUN_365055c8(p, n), free lists at 0x365888c0) takes no lock, but the main thread is not its only
+// user: CrySoundSystem's streaming thread opens sound files through CryPak and builds STLport strings in
+// CrySystem too. When both pop or push the same free list at once, one block is handed out twice and a
+// free list ends up holding string text ("Poin", "Basi", "Bump"); a later level change dies in the
+// allocator. Both functions now run under one critical section; the netlog counts the times a thread
+// had to wait, each of them a corruption without it.
+#define CRYSYSTEM_TIMESTAMP 0x44b2705bu
+static DWORD g_nodeCs[6], g_nodeWaits; // CRITICAL_SECTION (24 bytes)
+static void nodeLock(void)
+{
+	if (TryEnterCriticalSection(g_nodeCs))
+		return;
+	if (++g_nodeWaits <= 10 || !(g_nodeWaits & 1023))
+		logf("node allocator: thread %u waited for another thread (%u times so far)", GetCurrentThreadId(), g_nodeWaits);
+	EnterCriticalSection(g_nodeCs);
+}
+static void *(__cdecl *oNodeAlloc)(DWORD);
+static void *__cdecl hNodeAlloc(DWORD n)
+{
+	void *p;
+	nodeLock();
+	p = oNodeAlloc(n);
+	LeaveCriticalSection(g_nodeCs);
+	return p;
+}
+static void(__cdecl *oNodeFree)(void *, DWORD);
+static void __cdecl hNodeFree(void *p, DWORD n)
+{
+	nodeLock();
+	oNodeFree(p, n);
+	LeaveCriticalSection(g_nodeCs);
+}
+
 static DWORD __stdcall worker(void *unused)
 {
 	static const BYTE eh[] = {0xb8, 0xff, 0xff, 0xff, 0xff};                // mov eax, imm32 (EH prolog)
@@ -751,6 +791,18 @@ static DWORD __stdcall worker(void *unused)
 	int i;
 	if (!g_server) // first, before CryInput initialises; the dedicated server has no input
 		keyboardUS();
+	{
+		BYTE *cs;
+		for (i = 0; i < 120000 && !(cs = (BYTE *)GetModuleHandleA("CrySystem.dll")); i++)
+			Sleep(1);
+		if (cs && *(DWORD *)(cs + *(DWORD *)(cs + 0x3c) + 8) == CRYSYSTEM_TIMESTAMP) {
+			static const BYTE na[] = {0x8b, 0x54, 0x24, 0x04, 0x8d, 0x4a, 0xff};             // mov edx,[esp+4]; lea ecx,[edx-1]
+			static const BYTE nf[] = {0x8b, 0x44, 0x24, 0x08, 0x8b, 0x4c, 0x24, 0x04}; // mov eax,[esp+8]; mov ecx,[esp+4]
+			hook(cs + 0x5c27, 7, na, hNodeAlloc, (void **)&oNodeAlloc, "CrySystem node alloc");
+			hook(cs + 0x55c8, 8, nf, hNodeFree, (void **)&oNodeFree, "CrySystem node free");
+		} else
+			logf("CrySystem.dll missing or not the 1.4 build, node allocator not hooked");
+	}
 	for (i = 0; i < 120000 && !(g_base = (BYTE *)GetModuleHandleA("CryGame.dll")); i++)
 		Sleep(1);
 	if (!g_base) {
@@ -815,6 +867,7 @@ BOOL __stdcall DllMain(HANDLE self, DWORD reason, void *reserved)
 	if (reason != 1) // DLL_PROCESS_ATTACH
 		return 1;
 	DisableThreadLibraryCalls(self);
+	InitializeCriticalSection(g_nodeCs);
 	GetModuleFileNameA(0, exe, sizeof exe);
 	for (name = p = exe; *p; p++)
 		if (*p == '\\')
