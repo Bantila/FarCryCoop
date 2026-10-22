@@ -69,6 +69,7 @@ If something does not work, send `log.txt` from the Far Cry folder, the `netlog_
 - `#CoopAmmo()` — full ammo, `#CoopWeapons()` — all weapons
 - `#CoopGoto()` — list checkpoints, `#CoopGoto(3)` — move everyone to checkpoint 3
 - `#CoopMap(COOP_Map)` — restart the map, friends stay connected
+- `#CoopDifficulty(2)` — difficulty (0 easy, 1 medium, 2 challenging, 3 veteran, 4 realistic); the launcher sets it too. Restart the map for enemies to use it.
 
 ## Known limitations
 - Cutscenes are off for joined players.

@@ -167,7 +167,7 @@ Monitor: `moved <id> <name> <class>` for loose objects within 15 m of a player w
 Fix 10 (ASI): an entity of class `RigidBody`, `DestroyableObject` or `BasicEntity` (the barrels and crates of Pier) gets net presence once it moves on the server; `GetClassId` is at `+0xe8` of the `IEntity` vtable (`cmp ax, class id` right after it at `0x33071930`). No client packet failures with it, and respawn works (the owner can crouch and fire after dying). With `Gunship` in the list the gunship did reach the client, but flew in jerks; the owner chose to leave it out.
 
 Known limitations (owner's decision, 2026-10-20):
-- Helicopters (`Gunship`, `CargoChopper`) are not synced: a client sees them hang at their spawn point while they fly and fight on the server. Helicopters are for the host only, in the planned mode where the host plays the normal single-player game and friends join it.
+- Helicopters (`Gunship`, `CargoChopper`) are not synced: a client sees them hang at their spawn point while they fly and fight on the server. (Superseded: see Fix 10 and Spike 12; they follow once they move on the server.)
 - Physics props (owner, 2026-10-21: the host cannot push them either): a remote player's body does not push barrels or crates on the server (nothing moved there when the client pushed them), so they stay put for everyone. Props pushed by explosions on the server are synced.
 
 ## Spike 9 — host mode and the Russian keyboard layout (2026-10-21)
@@ -227,6 +227,21 @@ The engine's `CXGame::Save` and `LoadFromStream` return early in multiplayer, so
 
 Verified in game (Pier, two games on one PC): `CoopSave`, then `CoopTeleport` 60 m away, then `CoopLoad`: the host and the client are back on the saved spot; a checkpoint creates `save_auto.lua`; the launcher starts a game from `save:t2` and both players appear on the saved spot. Not verified: the F6/F7 keys (no keyboard in the test), the single-player "Load Game" menu (not connected: it loads single-player saves), a long mission played through after a load.
 
+## Spike 12 — difficulty, level sweep, helicopters (2026-10-22)
+
+**Difficulty.** `#CoopDifficulty(n)` (n = 0 easy, 1 medium, 2 challenging, 3 veteran, 4 realistic, or a name; also `coop_difficulty`) sets the same globals as the single-player menu (`UI.PageCampaign:SetAIDifficulty` in `Campaign.lua`: `game_Accuracy`, `game_Aggression`, `game_Health`, `ai_SOM_SPEED`, `game_DifficultyLevel`). A co-op game never goes through that menu, so the mod sets them: in `CoopMap` from `COOP_Difficulty`, which the launcher puts in front of the console line. Enemies read it when they spawn: `coop_restart` after a change. Saves keep it. Checked in game: the launcher's "Veteran" gave `game_Accuracy 1.1`, `game_Health 1.2`. The launcher's map list is in story order (`DEFIANT` in `defiant.lua`).
+
+**Level sweep.** A script (not committed, `Temp\sweep.ps1`) started two games from the launcher ("Test on one PC"), changed the map the way a mission end does (`COOP_PendingMap`), read both players' positions through `join_<pid>.txt`, hopped through up to 4 checkpoints per level with `CoopGoto`, and read `log.txt` for errors. Results:
+- **Fine** (both games alive, the client at the host's spot after every checkpoint hop, 0-3 m): Training, Carrier, Fort, Research, Bunker, Regulator, Rebellion, Archive, Cooler. Up to 4 checkpoints per level were reached by teleport; the log shows `saved auto` (an autosave at a save trigger) on Fort and Research.
+- **Client late:** Pier loaded with the client 20 m off, Fort checkpoint 3 once 241 m, Control 155 m at the load and 94 m at checkpoint 6 (it caught up at the next hop).
+- **Treehouse: both games die** with a `CryEngine Error` window, `CRITICAL ERROR:: ReadPacked i== 20`. The string is in `CryPhysics.dll` only. It happens at the level load, also on a fresh launch of the host alone, so it is not the map change and not the client. Cause unknown; the level has `hangingbridge.lyr` and `level1.pak`. Not checked without the mod: there was no way to start a single-player level from a script (`StartLevel` and `map` did nothing there).
+- **Steam:** one of the two games died at the load (after Bunker); the sweep started both again. Which one and why: not looked at.
+- **Boat:** after the change Cooler -> Boat the server had only the host's player; the client was gone for Boat, Catacombs and River.
+- **Swamp, Factory, Dam, Volcano: no data.** After River the host stayed in River (no `map swamp` event); not looked at.
+- **Bunker:** one Lua error, once: `AI error in DEFAULT.CONVERSATION_REQUEST: attempt to index field CurrentConversation (a nil value)` (our wrapper of the AI behaviours logs it).
+
+**Helicopters (Pier).** The 6 helicopters (5 `Gunship`, one `V1`) exist on both sides: every client spawns them from the level. At rest they do not move on the host. On the client they hover 8-34 m higher than on the host (a local simulation, +-2 m). When the host moves one (`SetPos` +40 m), the ASI gives it net presence (`netPresenceIfMoved`) and the client is on the same spot at the first sample (gap 0 m, held for 28 s). So the sync path works; the old note "clients see them hanging in place" was true only before they first move on the server. Not seen: a mission helicopter really flying (the Boat boss), how smooth it looks. Idea: give helicopters net presence from the start (they exist on every client), which would also remove the hover offset; not done, because a helicopter that a script spawns later may not exist on the client yet.
+
 ## Level survey (2026-10-21)
 
 Every campaign level's `level.pak` (mission XML, `moviedata.xml`, level Lua) scanned for what matters to co-op (script: `Tempnalyze_levels.py`, not committed). Order as in `DEFIANT`.
@@ -266,11 +281,12 @@ Findings:
 
 ## Next steps
 
-1. Host mode: check the intro cutscene for the host; try other campaign maps.
-2. Verify checkpoints in game (Pier `saveTrigger56`, Training `saveTrigger3`).
+1. **Treehouse crashes on load** (`ReadPacked i== 20`, `CryPhysics.dll`, Spike 12): find the cause (Ghidra/REA on the string, the `hangingbridge.lyr` layer).
+2. **Re-run the level sweep** after that: the client lost at the Cooler -> Boat change, the Steam load death, the stall after River (Swamp, Factory, Dam, Volcano have no data), the client arriving late after a map change (Control, Pier, Fort), the Bunker Lua error.
+2a. Done: the checkpoint hops work on every level checked in Spike 12 and the host autosaves at the save triggers; difficulty and the story-order map list (Spike 12). Not seen: a client respawning at a checkpoint after death, the intro cutscene for the host.
 3. With the monitor: AI jumps and other animation events on the dedicated server (root cause: no character animation ticks); then verify `coop_save`/`coop_load`, `coop_weapons`, `coop_noclip` on the client.
 4. Campaign saves: done as a Lua save (Spike 11). Left: mission state, triggers and pickups are not saved; try the engine's own saves (option A) only if that matters.
-4a. Cutscenes and helicopters for joined players (owner's priority). Enemies on the client move fine (owner); the short console commands are dropped.
+4a. Cutscenes for joined players (implemented, not seen in game) and a real helicopter flight (the Boat boss); the sync path itself works (Spike 12). Enemies on the client move fine (owner); the short console commands are dropped.
 5. Joining without Steam or a VPN: join code, UDP hole punching and a relay (crysis-coop idea above).
 6. PunkBuster stays off (`sv_punkbuster 0`); we never touch it (AGENTS.md rule 10).
 7. After the optimizations: host admin panel (in-game, no console), mission select by any player, friendly fire, `coop_dmg`, RocketMod: see [PLAN-fun-mode.md](PLAN-fun-mode.md).
