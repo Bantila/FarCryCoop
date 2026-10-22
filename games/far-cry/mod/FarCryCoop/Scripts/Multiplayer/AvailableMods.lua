@@ -14,8 +14,52 @@ AvailableMODList=
 -- multiplayer rocket launcher fires only after aiming and holding the button)
 COOP_SPWeapons = 1
 
+-- Difficulty, the five levels of the single-player menu (UI.PageCampaign:SetAIDifficulty in
+-- Campaign.lua): the same globals, set here because a co-op game never goes through that menu.
+-- {accuracy, aggression, health, accuracy may increase, AI speed}; the menu calls level 3 "Veteran".
+COOP_DIFFICULTY = {
+	{0.4, 0.3, 0.5, 0, 1.2},  -- 0 easy
+	{0.5, 0.5, 0.7, 0, 1.5},  -- 1 medium
+	{0.8, 0.8, 1.0, 0, 1.5},  -- 2 challenging
+	{1.1, 1.1, 1.2, 1, 1.8},  -- 3 veteran
+	{2.0, 2.0, 1.5, 1, 2.2},  -- 4 realistic
+};
+COOP_DIFFICULTY_NAMES = {easy = 0, medium = 1, challenging = 2, veteran = 3, brutal = 3, realistic = 4};
+
+function CoopApplyDifficulty(level)
+	local d = COOP_DIFFICULTY[level + 1];
+	if (not d) then return; end
+	setglobal("game_DifficultyLevel", level);
+	setglobal("game_Accuracy", d[1]);
+	setglobal("game_Aggression", d[2]);
+	setglobal("game_Health", d[3]);
+	setglobal("ai_allow_accuracy_decrease", 1);
+	setglobal("ai_allow_accuracy_increase", d[4]);
+	setglobal("ai_SOM_SPEED", d[5]);
+end
+
+-- #CoopDifficulty(2) or #CoopDifficulty("challenging"); without an argument it shows the level.
+-- Enemies read it when they spawn: restart the map (coop_restart) after changing it.
+function CoopDifficulty(v)
+	if (v == nil or v == "") then
+		System:LogAlways("coop_difficulty: "..tostring(COOP_Difficulty).." (0 easy, 1 medium, 2 challenging, 3 veteran, 4 realistic)");
+		return;
+	end
+	local n = tonumber(v);
+	if (not n and type(v) == "string") then n = COOP_DIFFICULTY_NAMES[strlower(v)]; end
+	if (not n or not COOP_DIFFICULTY[n + 1]) then
+		System:LogAlways("coop_difficulty: use 0-4 or easy, medium, challenging, veteran, realistic");
+		return;
+	end
+	COOP_Difficulty = n;
+	CoopApplyDifficulty(n);
+	System:LogAlways("coop_difficulty: "..n.." set; coop_restart for enemies to use it");
+end
+Game:AddCommand("coop_difficulty", "CoopDifficulty(%%)", "coop_difficulty [0-4|name]: show or set the difficulty (0 easy ... 4 realistic)");
+
 -- FarCryCoop: start a campaign map as a co-op server, e.g. "coop_map Pier"
 function CoopMap(name)
+	if (COOP_Difficulty) then CoopApplyDifficulty(tonumber(COOP_Difficulty)); end -- the launcher sets it
 	local mission = Game:GetMapDefaultMission(name);
 	if (not mission) then
 		System:LogAlways("coop_map: map '"..tostring(name).."' not found");

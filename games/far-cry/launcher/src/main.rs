@@ -60,6 +60,11 @@ fn game_name() -> String {
         .unwrap_or_default()
 }
 
+const STORY: [&str; 20] = [
+    "Training", "Carrier", "Fort", "Pier", "Research", "Treehouse", "Bunker", "Steam", "Regulator", "Control",
+    "Rebellion", "Archive", "Cooler", "Boat", "Catacombs", "River", "Swamp", "Factory", "Dam", "Volcano",
+];
+
 // campaign levels: folders of Levels without the multiplayer maps
 #[tauri::command]
 fn list_maps() -> Result<Vec<String>, String> {
@@ -71,7 +76,8 @@ fn list_maps() -> Result<Vec<String>, String> {
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .filter(|n| !n.to_lowercase().starts_with("mp_") && n != "Demo" && n != "newcontrol")
         .collect();
-    maps.sort();
+    // the story order of the campaign (DEFIANT in defiant.lua); folders it does not list stay at the end
+    maps.sort_by_key(|m| (STORY.iter().position(|s| s.eq_ignore_ascii_case(m)).unwrap_or(usize::MAX), m.to_lowercase()));
     // co-op saves (Mods\FarCryCoop\save_<name>.lua, written by the host's game) follow as "save:<name>"
     if let Ok(dir) = mod_dir().and_then(|d| std::fs::read_dir(d).map_err(|e| e.to_string())) {
         let mut saves: Vec<String> = dir
@@ -92,10 +98,11 @@ fn list_maps() -> Result<Vec<String>, String> {
 fn prefs(me: &Value, loadout: bool) -> String {
     let weapons: Vec<&str> = me["weapons"].as_array().map(|a| a.iter().filter_map(|w| w.as_str()).collect()).unwrap_or_default();
     format!(
-        "COOP_Color={} COOP_Weapons=\"{}\" COOP_LoadoutMode={}",
+        "COOP_Color={} COOP_Weapons=\"{}\" COOP_LoadoutMode={} COOP_Difficulty={}",
         me["color"].as_u64().unwrap_or(1),
         weapons.join(" "),
-        loadout as u8
+        loadout as u8,
+        me["difficulty"].as_u64().unwrap_or(1)
     )
 }
 

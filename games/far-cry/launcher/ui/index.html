@@ -82,6 +82,8 @@
     <h2>Лобби / Lobby</h2>
     <label class="cap">Карта / Map</label>
     <select id="map"></select>
+    <label class="cap">Сложность / Difficulty</label>
+    <select id="diff"></select>
     <label class="check"><input type="checkbox" id="loadout"> Выкладка / Loadout</label>
     <button class="item" id="host">› Создать лобби / Host lobby</button>
     <label class="cap">IP хоста / Host IP</label>
@@ -113,7 +115,8 @@ const { listen } = window.__TAURI__.event;
 const COLORS = ['#000', '#fff', '#00f', '#0f0', '#f00', '#0ff', '#ff0', '#f0f', '#ff8000', '#808080'];
 const WEAPONS = ['Machete', 'Falcon', 'MP5', 'P90', 'M4', 'AG36', 'OICW', 'Shotgun', 'SniperRifle', 'M249', 'RL'];
 const $ = id => document.getElementById(id);
-let s = { name: '', color: 1, weapons: [], loadout: false, map: '', ip: '' };
+const DIFFS = ['Лёгкий / Easy', 'Средний / Medium', 'Сложный / Challenging', 'Ветеран / Veteran', 'Реализм / Realistic'];
+let s = { name: '', color: 1, weapons: [], loadout: false, map: '', ip: '', difficulty: 1 };
 let room = null; // last lobby state from the host
 let hosting = false; // set before lobby_host: its first state arrives during the call
 
@@ -139,6 +142,7 @@ function renderMe() {
   }));
   $('map').value = s.map; $('rmap').value = s.map;
   $('loadout').checked = s.loadout; $('rloadout').checked = s.loadout;
+  $('diff').value = s.difficulty;
   $('ip').value = s.ip;
 }
 
@@ -189,6 +193,7 @@ listen('lobby', e => {
 const act = (cmd, args, ok) => invoke(cmd, args).then(() => ok && status(ok)).catch(e => status(e));
 $('name').onchange = e => { s.name = e.target.value.trim(); changed(); };
 $('map').onchange = $('rmap').onchange = e => { s.map = e.target.value; changed(); };
+$('diff').onchange = e => { s.difficulty = +e.target.value; changed(); };
 $('loadout').onchange = $('rloadout').onchange = e => { s.loadout = e.target.checked; changed(); };
 $('ip').onchange = e => { s.ip = e.target.value.trim(); changed(); };
 $('host').onclick = () => (hosting = true) && act('lobby_host', { map: s.map, loadout: s.loadout }, 'Лобби создано, ждём игроков / Lobby is up');
@@ -203,7 +208,10 @@ $('leave').onclick = () => act('lobby_leave', {});
   if (!s.name) s.name = await invoke('game_name') || 'Player';
   try {
     const maps = await invoke('list_maps');
-    for (const sel of [$('map'), $('rmap')]) sel.replaceChildren(...maps.map(m => new Option(m)));
+    // story order from the host; the saves (save:<name>) follow without a number
+    let n = 0;
+    for (const sel of [$('map'), $('rmap')]) { n = 0; sel.replaceChildren(...maps.map(m => new Option(m.startsWith('save:') ? m : `${++n}. ${m}`, m))); }
+    $('diff').replaceChildren(...DIFFS.map((d, i) => new Option(d, i)));
     if (!maps.includes(s.map)) s.map = maps[0] || '';
   } catch (e) { status(e); }
   renderMe();

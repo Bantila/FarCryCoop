@@ -36,7 +36,8 @@ pub fn clean_me(me: &Value) -> Value {
         .as_array()
         .map(|a| a.iter().filter_map(|w| w.as_str()).filter(|w| crate::WEAPONS.contains(w)).take(4).collect())
         .unwrap_or_default();
-    json!({ "name": if name.trim().is_empty() { "Player".into() } else { name }, "color": color, "weapons": weapons })
+    let difficulty = me["difficulty"].as_u64().filter(|d| *d <= 4).unwrap_or(1);
+    json!({ "name": if name.trim().is_empty() { "Player".into() } else { name }, "color": color, "weapons": weapons, "difficulty": difficulty })
 }
 
 // every write happens with LOBBY locked: a peer that stops reading must not hang the lobby,

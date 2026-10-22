@@ -671,7 +671,7 @@ function CoopSave(name)
 	if (not Game:IsServer()) then return; end
 	if (not COOP_Map) then System:LogAlways("coop_save: no co-op map running"); return; end
 	if (strfind(name, "[^%w_]")) then System:LogAlways("coop_save: the name may have only letters, digits and _"); return; end
-	local save = {version = 1, map = COOP_Map, name = name, players = {}, dead = {}};
+	local save = {version = 1, map = COOP_Map, name = name, difficulty = COOP_Difficulty, players = {}, dead = {}};
 	if (date) then save.date = date("%Y-%m-%d %H:%M"); end
 	for i, P in CoopPlayers() do
 		local t, a = P:GetPos(), P:GetAngles();
@@ -715,6 +715,7 @@ function CoopLoad(name)
 	COOP_LoadedSave = nil;
 	if (type(save) ~= "table" or not save.map) then CoopSaveMessage("no save "..name); return; end
 	COOP_PendingLoad = save;
+	if (save.difficulty) then COOP_Difficulty = save.difficulty; end -- CoopMap applies it
 	if (COOP_Map) then
 		COOP_PendingMap = save.map; -- GameRules:OnUpdate loads it, never from inside an entity script
 	else
