@@ -881,6 +881,11 @@ function CoopApplyLoad()
 	for i, P in list do
 		if (not BasicPlayer.IsAlive(P)) then return; end -- wait until every player has spawned
 	end
+	-- a client still respawning after LoadLevelMPServer has a slot but no entity yet: wait for it (30 s at most)
+	local slots = 0;
+	for i, slot in Server:GetServerSlotMap() do slots = slots + 1; end
+	save.t0 = save.t0 or _time;
+	if (getn(list) < slots and _time - save.t0 < 30) then return; end
 	COOP_PendingLoad = nil;
 	for i = 1, getn(save.dead) do
 		local e = System:GetEntity(save.dead[i]);
