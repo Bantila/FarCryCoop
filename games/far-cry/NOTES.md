@@ -299,7 +299,7 @@ Findings:
 
 ## Next steps
 
-0. **Next: a client is not put on its saved spot when the load is applied early.** `CoopApplyLoad` waits until every player in `CoopPlayers()` is alive, but a client that has no entity yet (still respawning after `LoadLevelMPServer`) is not in that list: the load is applied without it (`loaded t5: 1 players`) and it stays at the spawn point. Fix: wait until the players match the connected server slots (`Server:GetServerSlotMap()`), with a timeout, or put late players on their saved spot when they spawn.
+0. Done (2026-10-23): a load waits up to 30 s for a client that is still respawning (`CoopApplyLoad` compares the players with `Server:GetServerSlotMap()`); seen in game: both players on the saved spot. The level intro plays on a listen host (`CoopMapIntro`). **Next: AI animation events on the dedicated server (item 3), then the level sweep (item 2).**
 1. Treehouse and Swamp: **worked around** (Spike 12: baked physics states are skipped in a co-op game). Left: why the baked text does not fit the reader, and whether the skipped states matter on any level.
 1a. **Level change: random host heap corruption** (Spike 12, [#2](https://github.com/Bantila/FarCryCoop/issues/2)): **fixed** (Fix 12: CrySystem's STLport node allocator under a lock, the sound thread used it too).
 2. **Re-run the level sweep** after that (it needs the sweep script to survive a dead level): whether the late-client cases of the first sweep (Control, Pier, Fort) are gone after the teleport watch, Factory, Dam and Volcano in a row.
