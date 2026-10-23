@@ -44,6 +44,7 @@ API(BOOL) CloseHandle(HANDLE);
 API(BOOL) DeleteFileA(const char *);
 API(void *) AddVectoredExceptionHandler(DWORD, long(__stdcall *)(void **));
 API(DWORD) GetTickCount(void);
+API(BOOL) IsBadReadPtr(const void *, DWORD);
 API(BOOL) DisableThreadLibraryCalls(HANDLE);
 API(int) lstrcmpiA(const char *, const char *);
 API(int) wvsprintfA(char *, const char *, va_list);
@@ -589,6 +590,110 @@ static void keyboardUS(void)
 // The launcher writes join_<pid>.txt for the one game it started: with two games on one PC a
 // listen host with no client yet sends no snapshots, so hosting() was 0 and the host's game took
 // the client's "connect" line from the shared join.txt and timed out connecting to itself.
+// FIX 13: AI jumps. CXPuppetProxy starts the jump animation itself (C++, not from Lua) and the jump
+// happens in OnAnimationEvent: JUMP_TAKEOFF (0xffff) at the take-off frame applies the physics jump
+// (Action iJump=1), JUMP_LAND (0xff00) at the land frame ends it. Nothing renders on the server,
+// and an AI the host does not look at is not animated either: no event ever arrives and the AI
+// "jumps" by walking. After the proxy registered both events (0x330ba317, in the AI movement
+// update of CXPuppetProxy; ebx = proxy, [ebp-0x24] = animation, [ebp-0x60] = take-off frame,
+// [ebp-0x14] = land frame, proxy+0x508 = jump duration) the jump is also timed here: take-off
+// 0.15 s after its frame (a real event comes first when the animation does run: m_bInJump,
+// proxy+0x4c8, is already set, then nothing is sent), landing one jump duration later, then
+// OnEndAnimation. The sink is the proxy's ICharInstanceSink (proxy+4): vtable +4 OnAnimationEvent,
+// +8 OnEndAnimation.
+#define MAX_JUMPS 16
+static struct {
+	BYTE *proxy;
+	void *vt; // the sink's vtable when registered (an entity freed since then has another)
+	char anim[64];
+	DWORD tTake, tLand, tEnd;
+	int state; // 0 waiting for take-off, 1 in the air, 2 landed
+} g_jump[MAX_JUMPS];
+static DWORD f2ms(float f) // no CRT: __ftol3 is not linked
+{
+	static const float k = 1000.f;
+	int r;
+	__asm {
+		fld f
+		fmul k
+		fistp r
+	}
+	return (DWORD)r;
+}
+static void *oJump;
+static void __cdecl jumpStarted(BYTE *proxy, const char *anim, int takeFrame, int landFrame)
+{
+	static int logged;
+	DWORD now = GetTickCount(), dur = 0;
+	int i, n;
+	float d = *(float *)(proxy + 0x508);
+	if (!hosting() || IsBadReadPtr(anim, 2))
+		return;
+	dur = (d > 0.05f && d < 10.f) ? f2ms(d) : (DWORD)((landFrame - takeFrame) * 1000 / 30);
+	for (i = 0; i < MAX_JUMPS; i++) // a free slot, or one left over from this proxy
+		if (!g_jump[i].proxy || g_jump[i].proxy == proxy || g_jump[i].tEnd + 5000 < now)
+			break;
+	if (i == MAX_JUMPS)
+		return;
+	g_jump[i].proxy = proxy;
+	g_jump[i].vt = *(void **)(proxy + 4);
+	for (n = 0; n < 63 && anim[n]; n++)
+		g_jump[i].anim[n] = anim[n];
+	g_jump[i].anim[n] = 0;
+	g_jump[i].tTake = now + (takeFrame > 0 ? takeFrame * 1000 / 30 : 0) + 150;
+	g_jump[i].tLand = g_jump[i].tTake + dur;
+	g_jump[i].tEnd = g_jump[i].tLand + 300;
+	g_jump[i].state = 0;
+	if (logged++ < 5)
+		logf("ai jump: %s take-off in %u ms, lands %u ms later", g_jump[i].anim, g_jump[i].tTake - now, dur);
+}
+static __declspec(naked) void hJump(void)
+{
+	__asm {
+		pushad
+		push dword ptr [ebp - 0x14]
+		push dword ptr [ebp - 0x60]
+		push dword ptr [ebp - 0x24]
+		push ebx
+		call jumpStarted
+		add esp, 16
+		popad
+		jmp dword ptr [oJump]
+	}
+}
+static void jumpTick(void)
+{
+	DWORD now;
+	int i;
+	if (!hosting())
+		return;
+	now = GetTickCount();
+	for (i = 0; i < MAX_JUMPS; i++) {
+		BYTE *sink;
+		if (!g_jump[i].proxy)
+			continue;
+		sink = g_jump[i].proxy + 4;
+		if (IsBadReadPtr(sink, 4) || *(void **)sink != g_jump[i].vt) { // proxy gone (level change, entity removed)
+			g_jump[i].proxy = 0;
+			continue;
+		}
+		if (g_jump[i].state == 0 && (int)(now - g_jump[i].tTake) >= 0) {
+			g_jump[i].state = 1;
+			if (g_jump[i].proxy[0x4c8]) { // a real animation event came first
+				g_jump[i].state = 3;
+			} else
+				((void(__fastcall *)(void *, void *, const char *, DWORD, DWORD))VFN(sink, 4))(sink, 0, g_jump[i].anim, 0xffff, 0xffff);
+		} else if (g_jump[i].state == 1 && (int)(now - g_jump[i].tLand) >= 0) {
+			g_jump[i].state = 2;
+			((void(__fastcall *)(void *, void *, const char *, DWORD, DWORD))VFN(sink, 4))(sink, 0, g_jump[i].anim, 0xff00, 0xff00);
+		} else if (g_jump[i].state == 2 && (int)(now - g_jump[i].tEnd) >= 0) {
+			g_jump[i].proxy = 0;
+			((void(__fastcall *)(void *, void *, const char *))VFN(sink, 8))(sink, 0, g_jump[i].anim);
+		} else if (g_jump[i].state == 3 && (int)(now - g_jump[i].tEnd) >= 0)
+			g_jump[i].proxy = 0;
+	}
+}
+
 static char g_join[600], g_joinOwn[600]; // Mods\FarCryCoop\join.txt, join_<pid>.txt
 static BYTE(__fastcall *oGameUpdate)(void *, void *);
 static DWORD g_joinTick;
@@ -633,6 +738,7 @@ static void runJoin(const char *file)
 static BYTE __fastcall hGameUpdate(void *game, void *edx)
 {
 	BYTE r = oGameUpdate(game, edx); // after the frame, as the console runs typed lines
+	jumpTick();
 	if (GetTickCount() - g_joinTick > 500) {
 		g_joinTick = GetTickCount();
 		runJoin(g_joinOwn);
@@ -832,6 +938,10 @@ static DWORD __stdcall worker(void *unused)
 	hook(CG(0x33080227), 5, ts, hTs, (void **)&oTs, "CXClient::OnServerMsgTimeStamp");
 	hook(CG(0x330816ef), 6, ue, hUe, (void **)&oUe, "CXClient::OnServerMsgUpdateEntity");
 	hook(CG(0x3307019e), 8, gw, hWarn, &oWarn, "GameWarning");
+	{
+		static const BYTE fl[] = {0xd9, 0x05, 0xff, 0xff, 0xff, 0xff}; // fld dword ptr [0x330ee61c] (absolute, relocatable)
+		hook(CG(0x330ba317), 6, fl, hJump, &oJump, "CXPuppetProxy jump registered");
+	}
 	{ // every process: a listen host runs remote players' areas too (remoteAreas checks hosting())
 		static const BYTE je[] = {0x0f, 0x84, 0x94, 0x00, 0x00, 0x00}; // je +0x94 (skip area block)
 		void *unused; // the trampoline of a relative jump is never called
