@@ -509,6 +509,20 @@ function CoopRun(name, fn)
 	end);
 end
 
+-- The level intro (Training first_cutscene, Steam val_leaves) is Mission:OnMapChange, which single
+-- player's engine calls after a map load and a listen server never does (g_MapChanged stayed 1).
+-- Call it once every player is alive: Movie:PlaySequence reaches the clients (SEQ).
+function CoopMapIntro()
+	if (not g_MapChanged or not _localplayer or COOP_PendingLoad or not Mission or not Mission.OnMapChange) then return; end
+	local list = CoopPlayers();
+	if (getn(list) == 0) then return; end
+	for i, P in list do
+		if (not BasicPlayer.IsAlive(P)) then return; end
+	end
+	Mission:OnMapChange();
+	g_MapChanged = nil;
+end
+
 function GameRules:OnUpdate(DeltaTime)
 	if COOP_PendingMap then -- next level asked for by a mission end (CoopStartLevel)
 		local map = COOP_PendingMap
@@ -542,6 +556,7 @@ function GameRules:OnUpdate(DeltaTime)
 	CoopRun("send veh out", CoopSendVehOut)
 	CoopRun("vehicle copies", CoopVehicleCopies)
 	CoopRun("wrap cutscene moves", CoopWrapCutsceneMoves)
+	CoopRun("map intro", CoopMapIntro)
 	CoopRun("boat seats", CoopBoatSeats)
 	call(CoopApplyLoadouts, {}, "x", function(msg) System:LogAlways("coop: loadout error: "..tostring(msg)); end)
 	call(CoopApplyPrefs, {}, "x", function(msg) System:LogAlways("coop: prefs error: "..tostring(msg)); end)
