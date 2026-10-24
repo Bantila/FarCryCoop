@@ -22,7 +22,7 @@ Versions on the way:
 | 2 | Full playthrough of all 20 levels, Training to Volcano | [#7](https://github.com/Bantila/FarCryCoop/issues/7) |
 | 3 | Test with 3 and 4 players | [#8](https://github.com/Bantila/FarCryCoop/issues/8) |
 | 4 | Long-run stability: no crash or heap corruption in a full session | [#9](https://github.com/Bantila/FarCryCoop/issues/9) |
-| 5 | A client that dies respawns at the last checkpoint | [#10](https://github.com/Bantila/FarCryCoop/issues/10) |
+| 5 | ~~A client that dies respawns at the last checkpoint~~ done 2026-10-24 (the fire key itself is left to #6) | [#10](https://github.com/Bantila/FarCryCoop/issues/10) |
 | 6 | Cutscenes for joined players, seen in game | [#11](https://github.com/Bantila/FarCryCoop/issues/11) |
 | 7 | Mounted guns used from a client | [#12](https://github.com/Bantila/FarCryCoop/issues/12) |
 | 8 | Boat boss (3 gunships) and a real helicopter flight | [#13](https://github.com/Bantila/FarCryCoop/issues/13) |

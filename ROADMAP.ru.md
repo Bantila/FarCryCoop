@@ -22,7 +22,7 @@ English version: [ROADMAP.md](ROADMAP.md)
 | 2 | Полное прохождение всех 20 уровней, от Training до Volcano | [#7](https://github.com/Bantila/FarCryCoop/issues/7) |
 | 3 | Тест на 3 и 4 игроков | [#8](https://github.com/Bantila/FarCryCoop/issues/8) |
 | 4 | Стабильность на длинной сессии: без крэшей и порчи кучи | [#9](https://github.com/Bantila/FarCryCoop/issues/9) |
-| 5 | Клиент после смерти возрождается на последнем чекпоинте | [#10](https://github.com/Bantila/FarCryCoop/issues/10) |
+| 5 | ~~Клиент после смерти возрождается на последнем чекпоинте~~ готово 2026-10-24 (саму клавишу огня проверит #6) | [#10](https://github.com/Bantila/FarCryCoop/issues/10) |
 | 6 | Заставки у подключившихся, проверенные в игре | [#11](https://github.com/Bantila/FarCryCoop/issues/11) |
 | 7 | Стационарные пушки с клиента | [#12](https://github.com/Bantila/FarCryCoop/issues/12) |
 | 8 | Босс на Boat (3 Gunship) и настоящий полёт вертолёта | [#13](https://github.com/Bantila/FarCryCoop/issues/13) |
