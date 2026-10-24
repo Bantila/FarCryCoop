@@ -158,7 +158,17 @@ end
 -- not streamed in yet missed it or fell through (sweep: Swamp checkpoint 4 left the client 1087 m
 -- away, Volcano checkpoint 3 44 m below). So every move of a remote player is watched
 -- (COOP_TeleWatch, COOP GameRules CoopTeleWatch): the server sends it again until the player is there.
+-- A seated player moved with SetPos stayed in the vehicle and died at once (sweep: Fort and Boat
+-- checkpoints, the host starts in a Zodiac; it then respawned at the level start): leave the seat first.
+function CoopLeaveSeat(P)
+	local v = P.theVehicle;
+	local u = v and VC.FindUserTable(v, P);
+	if (u) then VC.ReleaseUser(v, u); end
+end
 function CoopMovePlayer(P, pos, ang, retry)
+	if (P.theVehicle) then
+		call(CoopLeaveSeat, {P}, "x", function(msg) System:LogAlways("coop: leaving the vehicle failed: "..tostring(msg)); end);
+	end
 	P:SetPos(pos);
 	if (ang) then P:SetAngles(ang); end
 	for i, slot in Server:GetServerSlotMap() do
