@@ -138,7 +138,7 @@ The game's own binaries are not changed. A `CryGame.dll` rebuilt from the SDK wa
 
 ## Roadmap
 
-Full plan and the meaning of v1.0: [ROADMAP.md](ROADMAP.md) (open items are GitHub issues #6 to #18). Short list:
+Full plan and the meaning of v1.0: [ROADMAP.md](ROADMAP.md) (open items are GitHub issues #6 to #20). Short list:
 
 1. The random crash on a level change is fixed ([#2](https://github.com/Bantila/FarCryCoop/issues/2)); repeat the sweep over all 20 levels in one run (Treehouse, Swamp, Factory, Dam and Volcano were swept after the workaround).
 1a. Verify shirt color, loadout, the lobby "Start" and the F6 / F7 save keys in game with two players.

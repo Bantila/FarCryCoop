@@ -1,4 +1,4 @@
-# FarCryCoop 0.2 beta — campaign co-op for Far Cry (2004)
+﻿# FarCryCoop 0.3 beta — campaign co-op for Far Cry (2004)
 
 Play the Far Cry campaign together: one player hosts, friends join. Beta: expect bugs.
 

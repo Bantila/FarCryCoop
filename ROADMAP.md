@@ -10,8 +10,8 @@ Versions on the way:
 
 | Version | Condition |
 |---|---|
-| `v0.3-beta` | Current build, if the level sweep passes on at least 90% of the 20 levels |
-| `v0.x-beta` | Items 1 to 9 below are closed one by one |
+| `v0.3-beta` | Released 2026-10-24: the level sweep passed on 18 to 19 of 20 levels (see Spike 13 in the notes) |
+| `v0.x-beta` | Items 1 to 12 below are closed one by one |
 | `v1.0` | The two-PC test and the full playthrough pass, and no crash is open |
 
 ## Required for v1.0
@@ -28,6 +28,8 @@ Versions on the way:
 | 8 | Boat boss (3 gunships) and a real helicopter flight | [#13](https://github.com/Bantila/FarCryCoop/issues/13) |
 | 9 | Saves keep `Mission` variables and vehicles | [#14](https://github.com/Bantila/FarCryCoop/issues/14) |
 | 10 | Clean install from one archive, INSTALL in both languages | [#15](https://github.com/Bantila/FarCryCoop/issues/15) |
+| 11 | Volcano checkpoint 3: the client falls through the lift platform | [#19](https://github.com/Bantila/FarCryCoop/issues/19) |
+| 12 | Swamp checkpoint 2: the host dies right after arriving | [#20](https://github.com/Bantila/FarCryCoop/issues/20) |
 
 ## After 1.0
 

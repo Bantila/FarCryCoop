@@ -138,7 +138,7 @@ English version: [README.md](README.md)
 
 ## Планы
 
-Полный план и что значит v1.0: [ROADMAP.ru.md](ROADMAP.ru.md) (открытые пункты — issues GitHub #6–#18). Кратко:
+Полный план и что значит v1.0: [ROADMAP.ru.md](ROADMAP.ru.md) (открытые пункты — issues GitHub #6–#20). Кратко:
 
 1. Случайное падение при смене уровня исправлено ([#2](https://github.com/Bantila/FarCryCoop/issues/2)); повторить обход всех 20 уровней за один прогон (Treehouse, Swamp, Factory, Dam и Volcano обойдены после обхода проблемы).
 1a. Проверить в игре вдвоём цвет рубашки, выкладку, «Начать» в лобби и клавиши сохранения F6 / F7.

@@ -260,6 +260,15 @@ Checked on Training with two games: an item removed, a `ProximityTrigger` and an
 
 **Helicopters (Pier).** The 6 helicopters (5 `Gunship`, one `V1`) exist on both sides: every client spawns them from the level. At rest they do not move on the host. On the client they hover 8-34 m higher than on the host (a local simulation, +-2 m). When the host moves one (`SetPos` +40 m), the ASI gives it net presence (`netPresenceIfMoved`) and the client is on the same spot at the first sample (gap 0 m, held for 28 s). So the sync path works; the old note "clients see them hanging in place" was true only before they first move on the server. Not seen: a mission helicopter really flying (the Boat boss), how smooth it looks. Idea: give helicopters net presence from the start (they exist on every client), which would also remove the hover offset; not done, because a helicopter that a script spawns later may not exist on the client yet.
 
+## Spike 13 — full level sweep before 0.3-beta (2026-10-24)
+
+Sweep of all 20 levels (`Temp\sweep.ps1`: host + client on one PC, map change, checkpoint hops with `coop_goto`, gap between the players, log errors). Result of the first run: no crash, no log error, no access violation; 12 levels clean, 8 with a large gap at some checkpoint. A second run measured the gap again 20 s after each hop and read both players' health.
+
+- **Fixed: a seated player was moved with `SetPos`** (Fort and Boat: the host starts in a Zodiac). It stayed in the vehicle, died and respawned at the level start, so the client was left alone at the checkpoint. `CoopMovePlayer` now releases the seat first (`VC.ReleaseUser`). Fort and Boat are clean after that.
+- **Not placement results:** Catacombs 7/8, Volcano 3 (first run), Swamp 2 and Boat 2 (before the fix) happened with both players dead. Nobody presses fire in the test, so nobody respawns (the single-player rules respawn on the fire key, see [#10](https://github.com/Bantila/FarCryCoop/issues/10)), and a corpse moves or falls on its own. The test now reads both players' health and marks such rows; the last runs used `coop_god`.
+- **Open, real:** Volcano checkpoint 3 (the client falls through the lift platform, [#19](https://github.com/Bantila/FarCryCoop/issues/19)); Swamp checkpoint 2 (the host dies right after arriving, [#20](https://github.com/Bantila/FarCryCoop/issues/20)).
+- **Count:** 18 to 19 of 20 levels without a placement failure when the players are alive (Volcano fails, Swamp counts as a pass because the client stood where it should). Counting runs with dead players it would be 17 of 20. Released as `0.3-beta`.
+
 ## Level survey (2026-10-21)
 
 Every campaign level's `level.pak` (mission XML, `moviedata.xml`, level Lua) scanned for what matters to co-op (script: `Tempnalyze_levels.py`, not committed). Order as in `DEFIANT`.

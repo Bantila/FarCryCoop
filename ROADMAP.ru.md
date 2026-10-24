@@ -10,8 +10,8 @@ English version: [ROADMAP.md](ROADMAP.md)
 
 | Версия | Условие |
 |---|---|
-| `v0.3-beta` | Текущий билд, если обход уровней проходит минимум на 90% из 20 уровней |
-| `v0.x-beta` | Пункты 1–9 ниже закрываются по одному |
+| `v0.3-beta` | Выпущена 2026-10-24: обход уровней прошёл на 18–19 из 20 (см. спайк 13 в заметках) |
+| `v0.x-beta` | Пункты 1–12 ниже закрываются по одному |
 | `v1.0` | Тест на двух ПК и полное прохождение пройдены, открытых крэшей нет |
 
 ## Обязательно для v1.0
@@ -28,6 +28,8 @@ English version: [ROADMAP.md](ROADMAP.md)
 | 8 | Босс на Boat (3 Gunship) и настоящий полёт вертолёта | [#13](https://github.com/Bantila/FarCryCoop/issues/13) |
 | 9 | Сохранения хранят переменные `Mission` и технику | [#14](https://github.com/Bantila/FarCryCoop/issues/14) |
 | 10 | Чистая установка из одного архива, INSTALL на двух языках | [#15](https://github.com/Bantila/FarCryCoop/issues/15) |
+| 11 | Volcano, чекпоинт 3: клиент проваливается сквозь платформу лифта | [#19](https://github.com/Bantila/FarCryCoop/issues/19) |
+| 12 | Swamp, чекпоинт 2: хост погибает сразу после прибытия | [#20](https://github.com/Bantila/FarCryCoop/issues/20) |
 
 ## После 1.0
 
